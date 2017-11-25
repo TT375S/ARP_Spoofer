@@ -1,0 +1,12 @@
+## .gitignore ##
+# ignore all
+*
+!*/
+
+# allow any
+!Makefile
+!*.c
+!*.sh
+!*.h
+!*.md
+!.gitignore
