@@ -351,8 +351,8 @@ int main(int argc,char *argv[],char *envp[])
     DebugPrintf("bridge start\n");
     //---ARPスプーフィング
     static  u_char    bcast[6]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};    //ブロードキャストMACアドレス
-    char    in_addr_text_sender[100] = "192.168.1.110";            //ARPスプーフィング先A
-    char    in_addr_text_receiver[100] = "192.168.1.99";           //ARPスプーフィング先B (A→Bの通信を横取りする)
+    char    in_addr_text_sender[100] = "192.168.1.99";            //ARPスプーフィング先A
+    char    in_addr_text_receiver[100] = "192.168.1.110";           //ARPスプーフィング先B (A→Bの通信を横取りする)
     struct  in_addr    sendIp;
     struct  in_addr    recIp;
     
