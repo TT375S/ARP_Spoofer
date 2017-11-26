@@ -15,7 +15,7 @@ typedef struct	{
 	char	*Device2;
 	int	DebugOut;
 }PARAM;
-PARAM	Param={"eth0","eth3",0};
+PARAM	Param={"enp0s3","lo",1};
 
 typedef struct	{
 	int	soc;

