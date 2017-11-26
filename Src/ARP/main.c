@@ -122,18 +122,17 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
         ptr+=sizeof(struct ether_arp);
         lest-=sizeof(struct ether_arp);
         
-        //        if(arp->arp_op==htons(ARPOP_REQUEST)){
-        //            DebugPrintf("[%d]recv:ARP REQUEST:%dbytes\n",deviceNo,size);
-        //            Ip2Mac(deviceNo,*(in_addr_t *)arp->arp_spa,arp->arp_sha);
-        //        }
-        //        if(arp->arp_op==htons(ARPOP_REPLY)){
-        //            if(arp->arp_spa == send_ip)
-        //            DebugPrintf("[%d]recv:ARP REPLY:%dbytes\n",deviceNo,size);
-        //            Ip2Mac(deviceNo,*(in_addr_t *)arp->arp_spa,arp->arp_sha);
-        //        }
+        if(arp->arp_op==htons(ARPOP_REQUEST)){
+            DebugPrintf("[%d]recv:ARP REQUEST:%dbytes\n",deviceNo,size);
+            //Ip2Mac(deviceNo,*(in_addr_t *)arp->arp_spa,arp->arp_sha);
+        }
+        if(arp->arp_op==htons(ARPOP_REPLY)){
+            DebugPrintf("[%d]recv:ARP REPLY:%dbytes\n",deviceNo,size);
+            //Ip2Mac(deviceNo,*(in_addr_t *)arp->arp_spa,arp->arp_sha);
+        }
         
         //送信者かつ受信者のIPv4アドレスをチェック
-        if(*(in_addr_t *)arp->arp_spa == send_ip || *(in_addr_t *)arp->arp_tpa == rec_ip){
+        if(*(in_addr_t *)arp->arp_spa == send_ip && *(in_addr_t *)arp->arp_tpa == rec_ip){
             //端末BへのARPパケットだったら、無視する。（フォワーディングしてあげない）
             DebugPrintf("[%d]recv:MITM ARP PACKET:%dbytes\n",deviceNo,size);
             return (-1);
@@ -153,9 +152,14 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
         ptr+=sizeof(struct iphdr);
         lest-=sizeof(struct iphdr);
         
+        struct in_addr tempS, tempR;
+        tempS.s_addr = iphdr->saddr;
+        tempR.s_addr = iphdr->daddr;
+        DebugPrintf("IP PACKET: %s to %s\n",inet_ntoa(tempS), inet_ntoa(tempR));
+        
         //AからBへの通信のときは、IPアドレスとMACアドレスを入れ替えとく。
         if(iphdr->saddr == send_ip && iphdr->daddr == rec_ip){
-            DebugPrintf("MITM PACKET\n",deviceNo,lest);
+            DebugPrintf("[%d]recv:MITM IP PACKET:%dbytes\n",deviceNo,size);
             int ii=0;
             //宛先は普通に端末BのMACアドレス
             for(ii=0; ii<6; ii++) eh->ether_dhost[ii] = rec_mac[ii];
@@ -478,8 +482,10 @@ int main(int argc,char *argv[],char *envp[])
     }
     
     //TODO:あとでPARAMSに移動
-    static  u_char    mac_A[6]={0x68,0x05,0xCA,0x06,0xF6,0x7B};   //端末AのMACアドレス
-    static  u_char    mac_B[6]={0xB8,0x27,0xEB,0x4A,0xA3,0x53};   //端末BのMACアドレス
+    static  u_char    mac_A[6]={0x68,0x05,0xCA,0x06,0xF6,0x7B};   //端末AのMACアドレス(desk-h)
+    static  u_char    mac_B[6]={0xB8,0x27,0xEB,0x4A,0xA3,0x53};   //端末BのMACアドレス(rasp-h)
+    //static  u_char    mac_B[6]={0x08,0x00,0x27,0xCE,0xF8,0x80};  //MBP
+    
     //---ARPスプーフィングここまで
     //---ブリッジ
     MITMBridge(sendIp.s_addr, mac_A, recIp.s_addr, mac_B);
