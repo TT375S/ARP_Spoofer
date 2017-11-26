@@ -25,7 +25,7 @@ typedef struct	{
     char    *ip_B;
 }PARAM;
 //ここは手動で変える必要がある！
-PARAM	Param={"enp4s0","lo",1, "192.168.1.99", "192.168.1.110"};
+PARAM	Param={"enp4s0","lo",1, "192.168.1.4", "192.168.1.110"};
 
 typedef struct    {
     int    soc;
@@ -484,9 +484,9 @@ int main(int argc,char *argv[],char *envp[])
     }
     
     //TODO:あとでPARAMSに移動
-    static  u_char    mac_A[6]={0x68,0x05,0xCA,0x06,0xF6,0x7B};   //端末AのMACアドレス(desk-h)
+    //static  u_char    mac_A[6]={0x68,0x05,0xCA,0x06,0xF6,0x7B};   //端末AのMACアドレス(desk-h)
     static  u_char    mac_B[6]={0xB8,0x27,0xEB,0x4A,0xA3,0x53};   //端末BのMACアドレス(rasp-h)
-    //static  u_char    mac_B[6]={0x08,0x00,0x27,0xCE,0xF8,0x80};  //MBP
+    static  u_char    mac_A[6]={0x08,0x00,0x27,0xCE,0xF8,0x80};  //MBP
     
     //---ARPスプーフィングここまで
     //---ブリッジ
