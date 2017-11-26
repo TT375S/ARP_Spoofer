@@ -25,7 +25,7 @@ typedef struct	{
     char    *ip_B;
 }PARAM;
 //ここは手動で変える必要がある！
-PARAM	Param={"enp0s3","lo",1, "192.168.1.99", "192.168.1.110"};
+PARAM	Param={"enp4s0","lo",1, "192.168.1.99", "192.168.1.110"};
 
 typedef struct    {
     int    soc;
