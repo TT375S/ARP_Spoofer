@@ -205,7 +205,7 @@ int MITMBridge(in_addr_t send_ip,u_char send_mac[6],in_addr_t rec_ip,u_char rec_
                         //TODO:この辺で、イーサヘッダとIPヘッダを書き換えて、MITMブリッジをする
                         if(AnalyzePacket(deviceNo,buf,size)!=-1){
                             //MITMパケットの場合だけ送る
-                            if(proccessMITMPacket(deviceNo, buf, size, send_ip, send_mac[6], rec_ip, rec_mac[6]) ){
+                            if(proccessMITMPacket(deviceNo, buf, size, send_ip, send_mac, rec_ip, rec_mac) ){
                                 if((size=write(Device[deviceNo].soc,buf,size))<=0){
                                     perror("write");
                                 }
