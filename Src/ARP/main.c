@@ -15,29 +15,6 @@
 
 uint8_t bytes[6];
 
-
-int str2macaddr(char *macstr, uint8_t macaddr[6]){
-    int values[6];
-    int i;
-    
-    if( 6 == sscanf( macstr, "%x:%x:%x:%x:%x:%x%c",
-                    &values[0], &values[1], &values[2],
-                    &values[3], &values[4], &values[5] ) )
-    {
-        /* convert to uint8_t */
-        for( i = 0; i < 6; ++i )
-            macaddr[i] = (uint8_t) values[i];
-        return 1;
-    }
-    else
-    {
-        /* invalid mac */
-        DebugPrintf("Invalid MAC format\n");
-        return -1;
-    }
-}
-
-
 typedef struct	{
     char	*Device1;
     char	*Device2;
@@ -80,6 +57,27 @@ int DebugPerror(char *msg)
     }
     
     return(0);
+}
+
+int str2macaddr(char *macstr, uint8_t macaddr[6]){
+    int values[6];
+    int i;
+    
+    if( 6 == sscanf( macstr, "%x:%x:%x:%x:%x:%x%c",
+                    &values[0], &values[1], &values[2],
+                    &values[3], &values[4], &values[5] ) )
+    {
+        /* convert to uint8_t */
+        for( i = 0; i < 6; ++i )
+            macaddr[i] = (uint8_t) values[i];
+        return 1;
+    }
+    else
+    {
+        /* invalid mac */
+        DebugPrintf("Invalid MAC format\n");
+        return -1;
+    }
 }
 
 int AnalyzePacket(int deviceNo,u_char *data,int size)
