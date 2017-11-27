@@ -13,6 +13,29 @@
 #include    <netinet/ip.h>
 #include	"netutil.h"
 
+uint8_t bytes[6];
+
+
+int str2macaddr(char *macstr, uint8_t macaddr[6]){
+    int values[6];
+    int i;
+    
+    if( 6 == sscanf( macstr, "%x:%x:%x:%x:%x:%x%c",
+                    &values[0], &values[1], &values[2],
+                    &values[3], &values[4], &values[5] ) )
+    {
+        /* convert to uint8_t */
+        for( i = 0; i < 6; ++i )
+            macaddr[i] = (uint8_t) values[i];
+        return 1;
+    }
+    else
+    {
+        /* invalid mac */
+        DebugPrintf("Invalid MAC format\n");
+        return -1;
+    }
+}
 
 
 typedef struct	{
@@ -22,9 +45,11 @@ typedef struct	{
     
     char    *ip_A;
     char    *ip_B;
+    char    *mac_A;
+    char    *mac_B;
 }PARAM;
 //ここは手動で変える必要がある！
-PARAM	Param={"enp4s0","lo",1, "192.168.1.4", "192.168.1.110"};
+PARAM	Param={"enp4s0","lo",1, "192.168.1.4", "192.168.1.110", "08:00:27:CE:F8:80", "B8:27:EB:4A:A3:53"};
 
 typedef struct    {
     int    soc;
@@ -483,10 +508,11 @@ int main(int argc,char *argv[],char *envp[])
     
     //TODO:あとでPARAMSに移動
     //static  u_char    mac_A[6]={0x68,0x05,0xCA,0x06,0xF6,0x7B};   //端末AのMACアドレス(desk-h)
-    static  u_char    mac_B[6]={0xB8,0x27,0xEB,0x4A,0xA3,0x53};   //端末BのMACアドレス(rasp-h)
+    static  u_char    mac_B[6]; //端末BのMACアドレス(rasp-h)
+    str2macaddr(Param.mac_B, mac_B);
     //static  u_char    mac_B[6]={0x00,0x25,0x36,0xC3,0x74,0x16};  //router
-    static  u_char    mac_A[6]={0x08,0x00,0x27,0xCE,0xF8,0x80};  //MBP
-    
+    static  u_char    mac_A[6];  //MBP
+    str2macaddr(Param.mac_A, mac_A);
     //---ARPスプーフィングここまで
     //---ブリッジ
     MITMBridge(sendIp.s_addr, mac_A, recIp.s_addr, mac_B);
