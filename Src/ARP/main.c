@@ -517,6 +517,7 @@ int main(int argc,char *argv[],char *envp[])
     
     DebugPrintf("bridge start\n");
     
+    //スレッド関係の変数
     pthread_t arpTid;
     pthread_t arpTid_r;
     pthread_t bridgeTid;
@@ -524,6 +525,13 @@ int main(int argc,char *argv[],char *envp[])
     pthread_attr_t  attr;
     
     pthread_attr_init(&attr);
+    
+    //static  u_char    mac_B[6]={0x00,0x25,0x36,0xC3,0x74,0x16};  //router
+    static  u_char    mac_A[6];  //MBP
+    str2macaddr(Param.mac_A, mac_A);
+    //static  u_char    mac_A[6]={0x68,0x05,0xCA,0x06,0xF6,0x7B};   //端末AのMACアドレス(desk-h)
+    static  u_char    mac_B[6]; //端末BのMACアドレス(rasp-h)
+    str2macaddr(Param.mac_B, mac_B);
 
     //---ARPスプーフィング
     static  u_char    bcast[6]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};    //ブロードキャストMACアドレス
@@ -541,7 +549,7 @@ int main(int argc,char *argv[],char *envp[])
     arg_arpspoof.ip_d = sendIp.s_addr;
     arg_arpspoof.ip_s = recIp.s_addr;
     //MACaddrのコピー
-    memcpy(arg_arpspoof.mac_d, bcast, 6);
+    memcpy(arg_arpspoof.mac_d, mac_A, 6);
     memcpy(arg_arpspoof.mac_s, Device[0].hwaddr, 6);
    
     //A→BのARPスプーフィング開始。ARPリクエストを送りつける
@@ -558,7 +566,7 @@ int main(int argc,char *argv[],char *envp[])
     arg_arpspoof_r.ip_d = recIp.s_addr;
     arg_arpspoof_r.ip_s = sendIp.s_addr;
     //MACaddrのコピー
-    memcpy(arg_arpspoof_r.mac_d, bcast, 6);
+    memcpy(arg_arpspoof_r.mac_d, mac_B, 6);
     memcpy(arg_arpspoof_r.mac_s, Device[0].hwaddr, 6);
   
     //B→AのARPスプーフィング開始。ARPリクエストを送りつける
@@ -568,13 +576,6 @@ int main(int argc,char *argv[],char *envp[])
     
     
     
-    //static  u_char    mac_B[6]={0x00,0x25,0x36,0xC3,0x74,0x16};  //router
-    static  u_char    mac_A[6];  //MBP
-    str2macaddr(Param.mac_A, mac_A);
-    
-    //static  u_char    mac_A[6]={0x68,0x05,0xCA,0x06,0xF6,0x7B};   //端末AのMACアドレス(desk-h)
-    static  u_char    mac_B[6]; //端末BのMACアドレス(rasp-h)
-    str2macaddr(Param.mac_B, mac_B);
     
     //---ARPスプーフィングここまで
     //---ブリッジ
