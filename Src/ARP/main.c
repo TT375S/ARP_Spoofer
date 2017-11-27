@@ -28,7 +28,7 @@ typedef struct	{
     char    *mac_B;
 }PARAM;
 //ここは手動で変える必要がある！
-PARAM	Param={"enp4s0","lo",1, "192.168.1.4", "192.168.1.110", "08:00:27:CE:F8:80", "B8:27:EB:4A:A3:53"};
+PARAM	Param={"enp4s0","lo",1, "192.168.1.4", "192.168.1.110", "A4:5E:60:B7:29:C7", "B8:27:EB:4A:A3:53"};
 
 typedef struct    {
     int    soc;
@@ -549,12 +549,14 @@ int main(int argc,char *argv[],char *envp[])
     //}
     
     //TODO:あとでPARAMSに移動
-    //static  u_char    mac_A[6]={0x68,0x05,0xCA,0x06,0xF6,0x7B};   //端末AのMACアドレス(desk-h)
-    static  u_char    mac_B[6]; //端末BのMACアドレス(rasp-h)
-    str2macaddr(Param.mac_B, mac_B);
     //static  u_char    mac_B[6]={0x00,0x25,0x36,0xC3,0x74,0x16};  //router
     static  u_char    mac_A[6];  //MBP
     str2macaddr(Param.mac_A, mac_A);
+    
+    //static  u_char    mac_A[6]={0x68,0x05,0xCA,0x06,0xF6,0x7B};   //端末AのMACアドレス(desk-h)
+    static  u_char    mac_B[6]; //端末BのMACアドレス(rasp-h)
+    str2macaddr(Param.mac_B, mac_B);
+    
     //---ARPスプーフィングここまで
     //---ブリッジ
     MITMBridge(sendIp.s_addr, mac_A, recIp.s_addr, mac_B);
