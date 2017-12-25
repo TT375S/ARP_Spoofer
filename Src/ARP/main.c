@@ -724,7 +724,12 @@ int main(int argc,char *argv[],char *envp[])
     pthread_join(arpTid     , NULL);
     pthread_join(arpTid_r   , NULL);
     pthread_join(bridgeTid  , NULL);
-    
+   
+    //victimたちのARPテーブルの修復(ARPスプーフィングのときと違い、送信元MACaddrが正しい)
+    SendArpRequestB(arg_arpspoof.soc, arg_arpspoof.ip_d, arg_arpspoof.mac_d, arg_arpspoof.ip_s, arg_arpspoof_r.mac_d);
+    SendArpRequestB(arg_arpspoof_r.soc, arg_arpspoof_r.ip_d, arg_arpspoof_r.mac_d, arg_arpspoof_r.ip_s, arg_arpspoof.mac_d);
+
+
     close(Device[0].soc);
     close(Device[1].soc);
     
