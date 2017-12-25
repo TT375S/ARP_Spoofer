@@ -16,6 +16,7 @@
 #include	"netutil.h"
 #include    <unistd.h>
 #include    <sys/time.h>
+#include    <signal.h>
 
 uint8_t bytes[6];
 
@@ -687,6 +688,37 @@ int main(int argc,char *argv[],char *envp[])
     //Bridge();
     //---ブリッジここまで
     DebugPrintf("bridge end\n");
+
+    //-----SIGによるスレッドの終了ここから----
+	int signo;
+	sigset_t ss;
+	pthread_t th;
+
+	/* シグナルハンドリングの準備 */
+	sigemptyset(&ss);
+
+	/* block SIGTERM */
+	if(sigaddset(&ss, SIGINT) == -1){
+	}
+
+	sigprocmask(SIG_BLOCK, &ss, NULL);
+
+    //SIGINT待ち
+	for(;;){
+		if(sigwait(&ss, &signo) == 0){	/* シグナルが受信できたら */
+			if(signo == SIGINT){
+				//puts("sigterm recept");
+				break;
+			}
+		}
+	}
+
+    //スレッドのキャンセル
+	pthread_cancel(arpTid);
+    pthread_cancel(arpTid_r);
+    pthread_cancel(bridgeTid);
+    //-----SIGによるスレッドの終了ここまで----
+
 
     //スレッド終了を待つ
     pthread_join(arpTid     , NULL);
