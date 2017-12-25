@@ -26,7 +26,8 @@ typedef struct	{
     char    *mac_B;
 }PARAM;
 //ここは手動で変える必要がある！
-PARAM	Param={"enp4s0","lo",1, "192.168.1.4", "192.168.1.110", "A4:5E:60:B7:29:C7", "B8:27:EB:4A:A3:53"};
+//PARAM	Param={"enp4s0","lo",1, "192.168.1.4", "192.168.1.110", "A4:5E:60:B7:29:C7", "B8:27:EB:4A:A3:53"}; //AP DESK-RASPPI
+PARAM	Param={"enp0s3","lo",1, "192.168.0.28", "192.168.0.32", "D0:E1:40:98:DE:9A", "B8:27:EB:4A:A3:53"}; //JIKKA MBP-RASPPI
 
 typedef struct    {
     int    soc;
