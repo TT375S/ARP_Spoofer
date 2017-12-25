@@ -132,23 +132,24 @@ struct pcap_file_header{
     uint32_t linktype;
 };
 
-struct pcap_file_header *pfheader = NULL;
 char pcapDumpFileName[50] = "pcapDump.pcap";
 
 //pcapファイルを準備
-void pcap_init(struct pcap_file_header *pfhdr){
-    pfhdr = (struct pcap_file_header *) malloc(sizeof(struct pcap_file_header));
+void pcap_init(){
+    struct pcap_file_header *pfhdr =  (struct pcap_file_header *) malloc(sizeof(struct pcap_file_header));
     pfhdr->magic = TCPDUMP_MAGIC;
     pfhdr->version_major = PCAP_VERSION_MAJOR;
     pfhdr->version_minor = PCAP_VERSION_MINOR;
-    pfhdr->thiszone = 9*60;
-    pfhdr->snaplen = 2048;
+    pfhdr->thiszone = -1*9*60*60;   //GMT+1:00だと-3600になるらしい
+    pfhdr->snaplen = 65535;
     pfhdr->sigfigs = 0;
     pfhdr->linktype = DLT_EN10MB;
 
     FILE *fpw = fopen(pcapDumpFileName, "ab");
     fwrite(pfhdr, sizeof(struct pcap_file_header), 1, fpw);
     fclose(fpw);
+
+    free(pfhdr);
 }
 
 //パケットの先頭に書き込む
@@ -159,7 +160,7 @@ struct pcap_pkthdr{
 };
 
 //パケット追記する
-void writePcap(u_char *data, int dsize){
+void pcap_write(u_char *data, int dsize){
     struct pcap_pkthdr pkthdr;
     struct timezone tz;
     gettimeofday(&(pkthdr.ts), &tz);
@@ -257,6 +258,7 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
         int isBtoA = (iphdr->saddr == rec_ip && iphdr->daddr == send_ip); 
         //AからBへの通信のときは、IPアドレスとMACアドレスを入れ替えとく。
         if(isAtoB || isBtoA){
+            pcap_write(data, size);
             DebugPrintf("[%d]recv:MITM IP PACKET:%dbytes\n",deviceNo,size);
             printf("MITM IP PACKET\n");
             int ii=0;
@@ -665,6 +667,9 @@ int main(int argc,char *argv[],char *envp[])
     memcpy(arg_bridge.mac_d, mac_A, 6);
     memcpy(arg_bridge.mac_s, mac_B, 6);
    
+    //pcapダンプ用意
+    pcap_init();
+
     //双方向ブリッジ開始
     if((status=pthread_create(&bridgeTid,&attr, StartMITMBridge, &arg_bridge))!=0){
         DebugPrintf("pthread_create:%s\n",strerror(status));
