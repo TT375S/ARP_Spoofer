@@ -36,6 +36,7 @@ typedef struct	{
 //PARAM	Param={"enp0s3","lo",0, "192.168.1.6", "192.168.1.99", "74:03:BD:7F:99:3E", "68:05:CA:06:F6:7B"};
 PARAM   Param={"enp0s3","lo",1, "192.168.0.28", "192.168.0.32", "D0:E1:40:98:DE:9A", "B8:27:EB:4A:A3:53"}; //JIKKA MBP-RASPPI
 
+
 typedef struct    {
     int    soc;
     u_char    hwaddr[6];
@@ -662,6 +663,7 @@ int main(int argc,char *argv[],char *envp[])
     
     
     
+
     //---ARPスプーフィングここまで
     //---ブリッジ
     
