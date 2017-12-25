@@ -1,4 +1,5 @@
 #include	<stdio.h>
+#include    <stdlib.h>
 #include	<string.h>
 #include	<unistd.h>
 #include	<poll.h>
@@ -13,7 +14,8 @@
 #include    <netinet/ip.h>
 #include    <pthread.h>
 #include	"netutil.h"
-#include <unistd.h>
+#include    <unistd.h>
+#include <sys/time.h>
 
 uint8_t bytes[6];
 
@@ -111,6 +113,67 @@ int AnalyzePacket(int deviceNo,u_char *data,int size)
     
     return(0);
 }
+
+
+//---pcapDump用----
+#define TCPDUMP_MAGIC 0xa1b2c3d4
+#define PCAP_VERSION_MAJOR 2
+#define PCAP_VERSION_MINOR 4
+#define DLT_EN10MB 1
+
+//pcapファイルの先頭に書き込む
+struct pcap_file_header{
+    uint32_t magic;
+    uint16_t version_major;
+    uint16_t version_minor;
+    int32_t thiszone;
+    uint32_t sigfigs;
+    uint32_t snaplen;
+    uint32_t linktype;
+};
+
+struct pcap_file_header *pfheader = NULL;
+char pcapDumpFileName[50] = "pcapDump.pcap";
+
+//pcapファイルを準備
+void pcap_init(struct pcap_file_header *pfhdr){
+    pfhdr = (struct pcap_file_header *) malloc(sizeof(struct pcap_file_header));
+    pfhdr->magic = TCPDUMP_MAGIC;
+    pfhdr->version_major = PCAP_VERSION_MAJOR;
+    pfhdr->version_minor = PCAP_VERSION_MINOR;
+    pfhdr->thiszone = 9*60;
+    pfhdr->snaplen = 2048;
+    pfhdr->sigfigs = 0;
+    pfhdr->linktype = DLT_EN10MB;
+
+    FILE *fpw = fopen(pcapDumpFileName, "ab");
+    fwrite(pfhdr, sizeof(struct pcap_file_header), 1, fpw);
+    fclose(fpw);
+}
+
+//パケットの先頭に書き込む
+struct pcap_pkthdr{
+    struct timeval ts;
+    uint32_t caplen;
+    uint32_t len;
+};
+
+//パケット追記する
+void writePcap(u_char *data, int dsize){
+    struct pcap_pkthdr pkthdr;
+    struct timezone tz;
+    gettimeofday(&(pkthdr.ts), &tz);
+    pkthdr.caplen = dsize;
+    pkthdr.len = dsize;
+    
+    FILE *fpw = fopen(pcapDumpFileName, "ab");
+    fwrite(&pkthdr, sizeof(struct pcap_pkthdr), 1, fpw);
+    fwrite(data, dsize, 1, fpw);
+    fclose(fpw);
+}
+
+//---pcapDump用ここまで----
+
 
 //MITMパケットを検出し、IPアドレスとMACアドレスを書き換えとく
 int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_char send_mac[6],in_addr_t rec_ip,u_char rec_mac[6]){
