@@ -16,6 +16,7 @@
 #include	"netutil.h"
 #include    <unistd.h>
 #include    <sys/time.h>
+#include    <signal.h>
 
 uint8_t bytes[6];
 
@@ -688,11 +689,47 @@ int main(int argc,char *argv[],char *envp[])
     //---ブリッジここまで
     DebugPrintf("bridge end\n");
 
+    //-----SIGによるスレッドの終了ここから----
+	int signo;
+	sigset_t ss;
+	pthread_t th;
+
+	/* シグナルハンドリングの準備 */
+	sigemptyset(&ss);
+
+	/* block SIGTERM */
+	if(sigaddset(&ss, SIGINT) == -1){
+	}
+
+	sigprocmask(SIG_BLOCK, &ss, NULL);
+
+    //SIGINT待ち
+	for(;;){
+		if(sigwait(&ss, &signo) == 0){	/* シグナルが受信できたら */
+			if(signo == SIGINT){
+				//puts("sigterm recept");
+				break;
+			}
+		}
+	}
+
+    //スレッドのキャンセル
+	pthread_cancel(arpTid);
+    pthread_cancel(arpTid_r);
+    pthread_cancel(bridgeTid);
+    //-----SIGによるスレッドの終了ここまで----
+
+
     //スレッド終了を待つ
     pthread_join(arpTid     , NULL);
     pthread_join(arpTid_r   , NULL);
     pthread_join(bridgeTid  , NULL);
-    
+   
+    //victimたちのARPテーブルの修復(ARPスプーフィングのときと違い、送信元MACaddrが正しい)
+    SendArpRequestB(arg_arpspoof.soc, arg_arpspoof.ip_d, arg_arpspoof.mac_d, arg_arpspoof.ip_s, arg_arpspoof_r.mac_d);
+    SendArpRequestB(arg_arpspoof_r.soc, arg_arpspoof_r.ip_d, arg_arpspoof_r.mac_d, arg_arpspoof_r.ip_s, arg_arpspoof.mac_d);
+
+
     close(Device[0].soc);
     close(Device[1].soc);
     
