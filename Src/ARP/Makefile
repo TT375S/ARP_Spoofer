@@ -1,4 +1,4 @@
-OBJS=main.o netutil.o
+OBJS=main.o netutil.o pcap_dump.o
 SRCS=$(OBJS:%.o=%.c)
 CFLAGS=-g -Wall
 LDLIBS=-lpthread

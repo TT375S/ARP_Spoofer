@@ -1,3 +1,11 @@
+/*
+ * netutil.c
+ *
+ *  Created on: 2017/12/26
+ *      Author: user1
+ */
+
+
 #include	<stdio.h>
 #include	<string.h>
 #include	<unistd.h>
@@ -103,4 +111,3 @@ char	buf[80];
 
 	return(0);
 }
-
