@@ -36,8 +36,6 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
     int    lest;
     struct ether_header    *eh;
     char    buf[80];
-    int    tno;
-    u_char    hwaddr[6];
 
     ptr=data;
     lest=size;
@@ -92,8 +90,6 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
     else if(ntohs(eh->ether_type)==ETHERTYPE_IP){
         //IPv4にしか対応してない
         struct iphdr    *iphdr;
-        u_char    option[1500];
-        int    optionLen;
 
         if(lest<sizeof(struct iphdr)){
             DebugPrintf("[%d]:lest(%d)<sizeof(struct iphdr)\n",deviceNo,lest);
@@ -135,7 +131,7 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
 //ARPスプーフィングした後の中間者としてのブリッジ(IPForwardingをオンにしておいた方がいい。)
 int MITMBridge(in_addr_t send_ip,u_char send_mac[6],in_addr_t rec_ip,u_char rec_mac[6]){
     struct pollfd    targets[2];
-    int    nready,i,size;
+    int    nready,size;
     u_char    buf[2048];
 
     targets[0].fd=Device[0].soc;
@@ -226,19 +222,6 @@ int main(int argc,char *argv[],char *envp[])
     DebugPrintf("addr=%s\n",my_inet_ntoa_r(&Device[0].addr,buf,sizeof(buf)));
     DebugPrintf("subnet=%s\n",my_inet_ntoa_r(&Device[0].subnet,buf,sizeof(buf)));
     DebugPrintf("netmask=%s\n",my_inet_ntoa_r(&Device[0].netmask,buf,sizeof(buf)));
-
-    if(GetDeviceInfo(Param.Device2,Device[1].hwaddr,&Device[1].addr,&Device[1].subnet,&Device[1].netmask)==-1){
-        DebugPrintf("GetDeviceInfo:error:%s\n",Param.Device2);
-        return(-1);
-    }
-    if((Device[1].soc=InitRawSocket(Param.Device2,1,0))==-1){
-        DebugPrintf("InitRawSocket:error:%s\n",Param.Device1);
-        return(-1);
-    }
-    DebugPrintf("%s OK\n",Param.Device2);
-    DebugPrintf("addr=%s\n",my_inet_ntoa_r(&Device[1].addr,buf,sizeof(buf)));
-    DebugPrintf("subnet=%s\n",my_inet_ntoa_r(&Device[1].subnet,buf,sizeof(buf)));
-    DebugPrintf("netmask=%s\n",my_inet_ntoa_r(&Device[1].netmask,buf,sizeof(buf)));
     //----デバイスセッティングここまで
 
     DisableIpForward();
@@ -261,15 +244,13 @@ int main(int argc,char *argv[],char *envp[])
 
     pthread_attr_init(&attr);
 
-    //static  u_char    mac_B[6]={0x00,0x25,0x36,0xC3,0x74,0x16};  //router
-    static  u_char    mac_A[6];  //MBP
+    static  u_char    mac_A[6];
     str2macaddr(Param.mac_A, mac_A);
-    //static  u_char    mac_A[6]={0x68,0x05,0xCA,0x06,0xF6,0x7B};   //端末AのMACアドレス(desk-h)
-    static  u_char    mac_B[6]; //端末BのMACアドレス(rasp-h)
+    static  u_char    mac_B[6];
     str2macaddr(Param.mac_B, mac_B);
 
     //---ARPスプーフィング
-    static  u_char    bcast[6]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};    //ブロードキャストMACアドレス
+    //static  u_char    bcast[6]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};    //ブロードキャストMACアドレス
     char    *in_addr_text_sender = Param.ip_A;                     //ARPスプーフィング先A
     char    *in_addr_text_receiver = Param.ip_B;                   //ARPスプーフィング先B (A→Bの通信を横取りする)
     struct  in_addr    sendIp;
@@ -309,10 +290,6 @@ int main(int argc,char *argv[],char *envp[])
         DebugPrintf("pthread_create:%s\n",strerror(status));
     }
 
-
-
-
-
     //---ARPスプーフィングここまで
     //---ブリッジ
 
@@ -340,7 +317,6 @@ int main(int argc,char *argv[],char *envp[])
     //-----SIGによるスレッドの終了ここから----
 	int signo;
 	sigset_t ss;
-	pthread_t th;
 
 	/* シグナルハンドリングの準備 */
 	sigemptyset(&ss);
@@ -377,9 +353,7 @@ int main(int argc,char *argv[],char *envp[])
     SendArpRequestB(arg_arpspoof.soc, arg_arpspoof.ip_d, arg_arpspoof.mac_d, arg_arpspoof.ip_s, arg_arpspoof_r.mac_d);
     SendArpRequestB(arg_arpspoof_r.soc, arg_arpspoof_r.ip_d, arg_arpspoof_r.mac_d, arg_arpspoof_r.ip_s, arg_arpspoof.mac_d);
 
-
     close(Device[0].soc);
-    close(Device[1].soc);
 
     return(0);
 

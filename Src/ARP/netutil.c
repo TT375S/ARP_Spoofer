@@ -11,6 +11,7 @@
 
 PARAM Param={"enp0s3","lo",1, "192.168.0.28", "192.168.0.32", "D0:E1:40:98:DE:9A", "B8:27:EB:4A:A3:53"}; //JIKKA MBP-RASPPI
 int EndFlag = 0;
+DEVICE	Device[2];
 
 int InitRawSocket(char *device,int promiscFlag,int ipOnly){
 struct ifreq	ifreq;

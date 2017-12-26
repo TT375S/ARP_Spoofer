@@ -58,7 +58,7 @@ typedef struct    {
     struct in_addr    addr,subnet,netmask;
 }DEVICE;
 
-DEVICE	Device[2];
+extern DEVICE	Device[2];
 
 int str2macaddr(char *macstr, uint8_t macaddr[6]);
 
