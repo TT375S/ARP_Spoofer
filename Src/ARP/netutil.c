@@ -9,7 +9,7 @@
 
 #include   "netutil.h"
 
-PARAM Param={"enp0s3","lo",1, "192.168.0.28", "192.168.0.32", "D0:E1:40:98:DE:9A", "B8:27:EB:4A:A3:53"}; //JIKKA MBP-RASPPI
+PARAM Param={"enp0s3","lo",1, "172.20.10.3", "172.20.10.14", "00:16:6f:35:ac:cb", "B8:27:EB:4A:A3:53"}; //JIKKA MBP-RASPPI
 int EndFlag = 0;
 DEVICE	Device[2];
 
