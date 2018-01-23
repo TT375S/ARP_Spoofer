@@ -8,7 +8,7 @@
 #include "pcap_dump.h"
 
 //---pcapDump用----
-char pcapDumpFileName[50] = "pcapDump.pcap";    //保存するpcapファイル名
+char pcapDumpFileName[50] = "undefined";    //保存するpcapファイル名
 
 //pcapファイルの先頭に書き込む
 struct pcap_file_header{
@@ -25,6 +25,18 @@ struct pcap_file_header{
 
 //pcapファイルを準備
 void pcap_init(){
+    //保存用ファイルネーム作成
+    pcapDumpFileName[0] = '\0';
+    strcat(pcapDumpFileName, "pcapDump-");
+    time_t timer;
+    timer = time(NULL);          /* 経過時間を取得 */
+    char *stringTime;
+    stringTime = ctime(&timer);
+    
+    stringTime[strlen(stringTime)] = '\0';  /* 改行削除  */
+    strcat(pcapDumpFileName, stringTime);
+    strcat(pcapDumpFileName, ".pcap");
+    
     struct pcap_file_header *pfhdr =  (struct pcap_file_header *) malloc(sizeof(struct pcap_file_header));
     pfhdr->magic = TCPDUMP_MAGIC;
     pfhdr->version_major = PCAP_VERSION_MAJOR;

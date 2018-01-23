@@ -8,11 +8,13 @@
 #ifndef PCAP_DUMP_H_
 #define PCAP_DUMP_H_
 
-#include   <stdint.h>
-#include	<stdio.h>
-#include   <stdlib.h>
-#include	<unistd.h>
-#include   <sys/time.h>
+#include    <stdint.h>
+#include    <stdio.h>
+#include    <stdlib.h>
+#include    <unistd.h>
+#include    <sys/time.h>
+#include    <time.h>
+#include    <string.h>
 
 #define TCPDUMP_MAGIC 0xa1b2c3d4
 #define PCAP_VERSION_MAJOR 2
