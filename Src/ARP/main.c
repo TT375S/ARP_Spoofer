@@ -211,8 +211,8 @@ int main(int argc,char *argv[],char *envp[])
     if(argc == 5) setParam("enp0s3", 1, argv[1], argv[2], argv[3], argv[4]);
  
     else{ 
-        DebugPrintf("Default param was set.");
-        setParam("enp0s3", 1, "192.168.1.8", "192.168.1.7", "08:00:27:d5:2a:5a", "08:00:27:8c:8a:35");
+        DebugPrintf("Please set CLI arguments. Victims's IP addreses and MAC addreses.");
+        return -1;
     }
     char    buf[80];
 
