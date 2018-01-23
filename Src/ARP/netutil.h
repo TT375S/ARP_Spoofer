@@ -36,7 +36,6 @@ extern int	EndFlag;
 
 typedef struct	{
     char	*Device1;
-    char	*Device2;
     int	DebugOut;
 
     char    *ip_A;
@@ -49,8 +48,9 @@ typedef struct	{
 //PARAM	Param={"enp4s0","lo",1, "192.168.1.7", "192.168.1.110", "08:00:27:CE:F8:80", "B8:27:EB:4A:A3:53"};
 //PARAM	Param={"enp0s3","lo",1, "192.168.1.99", "192.168.1.110", "68:05:CA:06:F6:7B", "B8:27:EB:4A:A3:53"};
 //PARAM	Param={"enp0s3","lo",0, "192.168.1.6", "192.168.1.99", "74:03:BD:7F:99:3E", "68:05:CA:06:F6:7B"};
-extern PARAM   Param;
+PARAM   Param;
 
+void setParam(char *devName, int isEnabledDebugOut, char *ip_addr_a, char *ip_addr_b, char *mac_addr_a, char *mac_addr_b);
 
 typedef struct    {
     int    soc;

