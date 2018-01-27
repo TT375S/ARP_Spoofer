@@ -253,7 +253,7 @@ void EndSignal(int sig)
 //--------------
 
 
-int SendArpRequestB(int soc,in_addr_t target_ip,u_char target_mac[6],in_addr_t my_ip,u_char my_mac[6])
+int SendArpPacket(int isRequest, int soc,in_addr_t target_ip,u_char target_mac[6],in_addr_t my_ip,u_char my_mac[6])
 {
     PACKET_ARP        arp;
     int      total;
@@ -269,7 +269,8 @@ int SendArpRequestB(int soc,in_addr_t target_ip,u_char target_mac[6],in_addr_t m
     arp.arp.arp_pro=htons(ETHERTYPE_IP);
     arp.arp.arp_hln=6;
     arp.arp.arp_pln=4;
-    arp.arp.arp_op=htons(ARPOP_REQUEST);
+    if(isRequest)arp.arp.arp_op=htons(ARPOP_REQUEST);
+    else arp.arp.arp_op=htons(ARPOP_REPLY) ;
 
     for(i=0;i<6;i++){
         arp.arp.arp_sha[i]=my_mac[i];

