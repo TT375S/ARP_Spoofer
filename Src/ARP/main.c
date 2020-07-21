@@ -107,6 +107,7 @@ int proccessMITMPacket(int deviceNo,u_char *data,int size, in_addr_t tag_a_ip,u_
         tempR.s_addr = iphdr->daddr;
         DebugPrintf("IP PACKET: %s to %s\n",inet_ntoa(tempS), inet_ntoa(tempR));
 
+        // TODO: ん？これだと L3(IP)で AとB間の通信しかMITM攻撃できない気がする。 ルータと普通のPC間の通信を、攻撃者端末がルータのフリして中継したい場合、通信はL2では被害者A→攻撃者、L3では被害者A→外部サーバとなり、L3で被害者A→被害者Bみたいにはならない。
         int isAtoB = (iphdr->saddr == tag_a_ip && iphdr->daddr == tag_b_ip);
         int isBtoA = (iphdr->saddr == tag_b_ip && iphdr->daddr == tag_a_ip);
         //AからBへの通信のときは、IPアドレスとMACアドレスを入れ替えとく。
